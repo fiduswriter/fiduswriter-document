@@ -4,7 +4,7 @@ import {writeFileSync} from "node:fs"
 import {dirname, join} from "node:path"
 import {fileURLToPath} from "node:url"
 
-import {SchemaExport} from "../src/schema/export.js"
+import {SchemaExport} from "../dist/schema/export.js"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const outPath = join(__dirname, "..", "schema.json")
