@@ -46,6 +46,7 @@
   },
   "files": [
     "dist/",
+    "src/",
     "scripts/",
     "schema.json",
     "README.md",
