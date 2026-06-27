@@ -1250,7 +1250,7 @@ const convertNodeV32 = (node, ids = []) => {
 
 const convertDocV32 = doc => {
     const returnDoc = JSON.parse(JSON.stringify(doc))
-    convertNodeV32(returnDoc.content)
+    convertNodeV32(returnDoc)
     return returnDoc
 }
 
@@ -1264,7 +1264,7 @@ const convertDocV33 = doc => {
 const convertDocV34 = doc => {
     // The top node needs to be changed from "article" to "doc".
     const returnDoc = JSON.parse(JSON.stringify(doc))
-    returnDoc.content.type = "doc"
+    returnDoc.type = "doc"
     return returnDoc
 }
 
