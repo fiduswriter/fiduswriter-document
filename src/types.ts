@@ -82,14 +82,43 @@ export interface ExportDoc {
     version?: string
 }
 
+/** A document contributor extracted from a contributors_part node. */
+export interface Contributor {
+    firstname?: string
+    lastname?: string
+    institution?: string
+    role?: string
+    email?: string
+    id_type?: string
+    id_value?: string
+    [key: string]: unknown
+}
+
+/** Metadata bundle assembled by exporters and passed to metadata handlers. */
+export interface ExportMetadata {
+    title: string
+    authors: Contributor[]
+    contributors: Contributor[]
+    keywords: string[]
+    language?: string
+    citationStyle?: string
+}
+
 /** A single comment thread. */
 export interface CommentData {
-    id: number
+    id?: number
     user: number
     username: string
     date: number
     resolved?: boolean
-    comments: Array<{user: number; username: string; date: number; comment: string}>
+    comment: FidusNode[]
+    answers?: Array<{
+        id?: string
+        user: number
+        username: string
+        date: number
+        answer: FidusNode[]
+    }>
 }
 
 /** A bibliographic database entry (format depends on the CSL engine). */
@@ -127,9 +156,22 @@ export interface ImageDB {
     db: ImageDBEntries
 }
 
+/** A parsed CSL/CSL-M stylesheet node. */
+export interface CSLStyleNode {
+    name: string
+    attrs?: Record<string, unknown>
+    children?: CSLStyleNode[]
+}
+
+/** A parsed CSL/CSL-M stylesheet. */
+export interface CSLStyle {
+    children: CSLStyleNode[]
+}
+
 /** A CSL/CSL-M stylesheet reference / engine provider. */
 export interface CSL {
     citationType?: string
+    getStyle?: (styleId: string) => Promise<CSLStyle>
     getEngine?: (
         sys: unknown,
         styleId: string,

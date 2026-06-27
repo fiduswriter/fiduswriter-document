@@ -2,7 +2,7 @@ import {escapeText} from "fwtoolkit"
 
 import type {DocSettings} from "../../types.js"
 
-interface HtmlExportSettings extends DocSettings {
+export interface HtmlExportSettings extends DocSettings {
     copyright?: {
         holder?: string
         year?: number
@@ -10,7 +10,7 @@ interface HtmlExportSettings extends DocSettings {
     }
 }
 
-interface HtmlExportTemplateOptions {
+export interface HtmlExportTemplateOptions {
     head: string
     body: string
     back: string

@@ -1,9 +1,32 @@
 import {FormatCitations} from "../../citations/format.js"
 
+import type {BibDB, CSL, ExportDoc} from "../../types.js"
 import {jatsBib} from "./bibliography.js"
 
+interface CitationLayout {
+    prefix?: string
+    suffix?: string
+    delimiter?: string
+}
+
+interface CSLStyleChild {
+    name: string
+    children?: CSLStyleChild[]
+    attrs?: Record<string, unknown>
+}
+
 export class JATSExporterCitations {
-    constructor(doc, bibDB, csl) {
+    doc: ExportDoc
+    bibDB: BibDB
+    csl: CSL
+
+    citationTexts: string[]
+    citFm: FormatCitations | false
+    jatsBib: string
+    jatsIdConvert: Record<string, number>
+    citInfos: Record<string, unknown>[]
+
+    constructor(doc: ExportDoc, bibDB: BibDB, csl: CSL) {
         this.doc = doc
         this.bibDB = bibDB
         this.csl = csl
@@ -12,9 +35,10 @@ export class JATSExporterCitations {
         this.citFm = false
         this.jatsBib = ""
         this.jatsIdConvert = {}
+        this.citInfos = []
     }
 
-    init(citInfos) {
+    init(citInfos: Record<string, unknown>[]): Promise<void> | undefined {
         this.citInfos = citInfos
         if (!citInfos.length) {
             return Promise.resolve()
@@ -25,44 +49,58 @@ export class JATSExporterCitations {
     // Citations are highly interdependent -- so we need to format them all
     // together before laying out the document.
     // We disregard the styling of the bibliography and instead create our own, JATS-specific bibliography.
-    formatCitations() {
+    formatCitations(): Promise<void> {
+        if (!this.csl.getStyle) {
+            return Promise.resolve()
+        }
         return this.csl
-            .getStyle(this.doc.settings.citationstyle)
+            .getStyle(this.doc.settings.citationstyle || "")
             .then(citationstyle => {
-                const modStyle = JSON.parse(JSON.stringify(citationstyle))
+                const modStyle = JSON.parse(JSON.stringify(citationstyle)) as {
+                    children: CSLStyleChild[]
+                }
                 const citationLayout = modStyle.children
-                    .find(section => section.name === "citation")
-                    .children.find(section => section.name === "layout").attrs
+                    .find(section => section.name === "citation")!
+                    .children!.find(section => section.name === "layout")!.attrs as CitationLayout
                 const origCitationLayout = JSON.parse(
                     JSON.stringify(citationLayout)
-                )
+                ) as CitationLayout
                 citationLayout.prefix = "{{prefix}}"
                 citationLayout.suffix = "{{suffix}}"
                 citationLayout.delimiter = "{{delimiter}}"
-                this.citFm = new FormatCitations(
+                const citFm = new FormatCitations(
                     this.csl,
-                    this.citInfos,
-                    modStyle,
+                    this.citInfos as any,
+                    modStyle as any,
                     "",
                     this.bibDB,
                     false,
                     this.doc.settings.language
                 )
+                this.citFm = citFm
                 return Promise.all([
                     Promise.resolve(origCitationLayout),
-                    this.citFm.init()
+                    citFm.init() as Promise<void>
                 ])
             })
             .then(([origCitationLayout]) => {
+                if (!this.citFm) {
+                    return Promise.resolve()
+                }
+                const citFm = this.citFm
                 // We need to add xref-links to the bibliography items. And there may be more than one work cited
                 // so we need to first split, then add the links and eventually put the citation back together
                 // again.
                 // The IDs used in the jats bibliography are 1 and up in this order
-                this.citFm.bibliography[0].entry_ids.forEach((id, index) => {
+                const bibliography = citFm.bibliography
+                if (!bibliography) {
+                    return Promise.resolve()
+                }
+                bibliography[0].entry_ids.forEach((id, index) => {
                     this.jatsIdConvert[id] = index + 1
                     this.jatsBib += jatsBib(this.bibDB.db[id], index + 1)
                 })
-                this.citationTexts = this.citFm.citationTexts.map(
+                this.citationTexts = citFm.citationTexts.map(
                     (ref, index) => {
                         const content = ref
                             .split("{{delimiter}}")
@@ -71,7 +109,7 @@ export class JATSExporterCitations {
                                     citationText.split("{{prefix}}")
                                 const prefix =
                                     prefixSplit.length > 1
-                                        ? prefixSplit.shift() +
+                                        ? prefixSplit.shift()! +
                                           (origCitationLayout.prefix || "")
                                         : ""
                                 citationText = prefixSplit[0]
@@ -80,13 +118,11 @@ export class JATSExporterCitations {
                                 const suffix =
                                     suffixSplit.length > 1
                                         ? (origCitationLayout.suffix || "") +
-                                          suffixSplit.pop()
+                                          suffixSplit.pop()!
                                         : ""
                                 citationText = suffixSplit[0]
-                                const citId =
-                                    this.citFm.citations[index].sortedItems[
-                                        conIndex
-                                    ][1].id
+                                const sortedItems = ((citFm.citations[index] as unknown as {sortedItems: Array<[unknown, {id: string}]>}).sortedItems)
+                                const citId = sortedItems[conIndex][1].id
                                 const jatsId = this.jatsIdConvert[citId]
                                 return `${prefix}<xref ref-type="bibr" rid="ref-${jatsId}">${citationText}</xref>${suffix}`
                             })

@@ -1,3 +1,6 @@
+import type {XMLElement} from "../tools/xml.js"
+import type {XmlZip} from "../tools/xml_zip.js"
+
 const DEFAULT_TABLENORMAL_XML = `
     <w:style w:type="table" w:default="1" w:styleId="TableNormal">
         <w:name w:val="Normal Table"/>
@@ -16,7 +19,7 @@ const DEFAULT_TABLENORMAL_XML = `
     </w:style>
     `
 
-const DEFAULT_TABLEGRID_XML = tableNormalStyle => `
+const DEFAULT_TABLEGRID_XML = (tableNormalStyle: string) => `
     <w:style w:type="table" w:styleId="TableGrid">
         <w:name w:val="Table Grid"/>
         <w:basedOn w:val="${tableNormalStyle}"/>
@@ -43,70 +46,77 @@ const DEFAULT_TABLEGRID_XML = tableNormalStyle => `
     `
 
 export class DOCXExporterTables {
-    constructor(xml) {
+    xml: XmlZip
+    sideMargins: number | false
+    tableGridStyle: string | null
+    tableNormalStyle: string | null
+    styleXML: XMLElement | null
+    styleFilePath: string
+
+    constructor(xml: XmlZip) {
         this.xml = xml
         this.sideMargins = false
-        this.tableGridStyle = false
-        this.tableNormalStyle = false
-        this.styleXML = false
+        this.tableGridStyle = null
+        this.tableNormalStyle = null
+        this.styleXML = null
         this.styleFilePath = "word/styles.xml"
     }
 
-    init() {
+    init(): Promise<void> {
         return this.xml.getXml(this.styleFilePath).then(styleXML => {
             this.styleXML = styleXML
             return Promise.resolve()
         })
     }
 
-    addTableNormalStyle() {
+    addTableNormalStyle(): void {
         if (this.tableNormalStyle) {
             // already added
             return
         }
-        const tableNormalEl = this.styleXML.query("w:style", {
+        const tableNormalEl = this.styleXML!.query("w:style", {
             "w:type": "table",
             "w:default": "1"
         })
         if (tableNormalEl) {
-            this.tableNormalStyle = tableNormalEl.getAttribute("w:styleId")
+            this.tableNormalStyle = String(tableNormalEl.getAttribute("w:styleId"))
         } else {
-            const stylesEl = this.styleXML.query("w:styles")
-            stylesEl.appendXML(DEFAULT_TABLENORMAL_XML)
+            const stylesEl = this.styleXML!.query("w:styles")
+            stylesEl?.appendXML(DEFAULT_TABLENORMAL_XML)
             this.tableNormalStyle = "TableNormal"
         }
     }
 
-    addTableGridStyle() {
+    addTableGridStyle(): void {
         if (this.tableGridStyle) {
             // already added
             return
         }
         this.addTableNormalStyle()
-        const tableGridEl = this.styleXML.query("w:style", {
+        const tableGridEl = this.styleXML!.query("w:style", {
             "w:type": "table",
             "w:customStyle": "1"
         })
         if (tableGridEl) {
-            this.tableGridStyle = tableGridEl.getAttribute("w:styleId")
+            this.tableGridStyle = String(tableGridEl.getAttribute("w:styleId"))
         } else {
-            const stylesEl = this.styleXML.query("w:styles")
-            stylesEl.appendXML(DEFAULT_TABLEGRID_XML(this.tableNormalStyle))
+            const stylesEl = this.styleXML!.query("w:styles")
+            stylesEl?.appendXML(DEFAULT_TABLEGRID_XML(this.tableNormalStyle || "TableNormal"))
             this.tableGridStyle = "TableGrid"
         }
     }
 
-    getSideMargins() {
+    getSideMargins(): number {
         if (!this.sideMargins) {
-            const marginsEl = this.styleXML.query("w:style", {
+            const marginsEl = this.styleXML!.query("w:style", {
                 "w:styleId": this.tableGridStyle
             })
-            const leftEl = marginsEl.query("w:left")
-            const rightEl = marginsEl.query("w:right")
-            const left = Number.parseInt(leftEl.getAttribute("w:w"))
-            const right = Number.parseInt(rightEl.getAttribute("w:w"))
+            const leftEl = marginsEl!.query("w:left")
+            const rightEl = marginsEl!.query("w:right")
+            const left = Number.parseInt(String(leftEl!.getAttribute("w:w")))
+            const right = Number.parseInt(String(rightEl!.getAttribute("w:w")))
             this.sideMargins = (left + right) * 635
         }
-        return this.sideMargins
+        return this.sideMargins as number
     }
 }

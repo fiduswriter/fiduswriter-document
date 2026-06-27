@@ -3,15 +3,26 @@ import {DOMParser, DOMSerializer} from "prosemirror-model"
 import {cslBibSchema} from "../../bibliography/csl_bib.js"
 import {FormatCitations} from "../../citations/format.js"
 import {fnSchema} from "../../schema/footnotes.js"
+import type {BibDB, CSL, ExportDoc, FidusNode} from "../../types.js"
 import {descendantNodes} from "../tools/doc_content.js"
 
-export class ODTExporterCitations {
-    constructor(docContent, settings, styles, bibDB, csl, origCitInfos = []) {
-        this.docContent = docContent
-        this.settings = settings
-        this.styles = styles
+export class PandocExporterCitations {
+    exporter: {doc: ExportDoc}
+    bibDB: BibDB
+    csl: CSL
+    docContent: FidusNode
+    origCitInfos: Record<string, unknown>[]
+    citInfos: Record<string, unknown>[]
+    citationTexts: string[]
+    pmCits: FidusNode[]
+    citFm: FormatCitations | false
+    pmBib: FidusNode | false
+
+    constructor(exporter: {doc: ExportDoc}, bibDB: BibDB, csl: CSL, docContent: FidusNode, origCitInfos: Record<string, unknown>[] = []) {
+        this.exporter = exporter
         this.bibDB = bibDB
         this.csl = csl
+        this.docContent = docContent
         // If citInfos were found in a previous run, they are stored here
         // (for example: first citations in main document, then in footnotes)
         this.origCitInfos = origCitInfos
@@ -22,13 +33,13 @@ export class ODTExporterCitations {
         this.pmBib = false
     }
 
-    init() {
+    init(): Promise<void> {
         return this.formatCitations()
     }
 
     // Citations are highly interdependent -- so we need to format them all
     // together before laying out the document.
-    formatCitations() {
+    formatCitations(): Promise<void> {
         if (this.origCitInfos.length) {
             // Initial citInfos are taken from a previous run to include in
             // bibliography, and they are removed before spitting out the
@@ -36,23 +47,23 @@ export class ODTExporterCitations {
             // That way the bibliography should contain information from both.
             this.citInfos = this.citInfos.concat(this.origCitInfos)
         }
-
         descendantNodes(this.docContent).forEach(node => {
-            if (node.type === "citation") {
+            if (node.type === "citation" && node.attrs) {
                 this.citInfos.push(JSON.parse(JSON.stringify(node.attrs)))
             }
         })
-        this.citFm = new FormatCitations(
+        const citFm = new FormatCitations(
             this.csl,
-            this.citInfos,
-            this.settings.citationstyle,
+            this.citInfos as any,
+            this.exporter.doc.settings.citationstyle || "",
             "",
             this.bibDB,
             false,
-            this.settings.language
+            this.exporter.doc.settings.language
         )
-        return this.citFm.init().then(() => {
-            this.citationTexts = this.citFm.citationTexts
+        this.citFm = citFm
+        return (citFm.init() as Promise<void>).then(() => {
+            this.citationTexts = citFm.citationTexts
             if (this.origCitInfos.length) {
                 // Remove all citation texts originating from original starting citInfos
                 this.citationTexts.splice(0, this.origCitInfos.length)
@@ -62,7 +73,10 @@ export class ODTExporterCitations {
         })
     }
 
-    convertCitations() {
+    convertCitations(): void {
+        if (!this.citFm) {
+            return
+        }
         // There could be some formatting in the citations, so we parse them through the PM schema for final formatting.
         // We need to put the citations each in a paragraph so that it works with
         // the fiduswriter schema and so that the converter doesn't mash them together.
@@ -77,25 +91,24 @@ export class ODTExporterCitations {
             const fnNode = fnSchema.nodeFromJSON({type: "footnotecontainer"})
             const serializer = DOMSerializer.fromSchema(fnSchema)
             const dom = serializer.serializeNode(fnNode)
-            dom.innerHTML = citationsHTML
+            ;(dom as HTMLElement).innerHTML = citationsHTML
             this.pmCits = DOMParser.fromSchema(fnSchema)
                 .parse(dom, {topNode: fnNode})
-                .toJSON().content
+                .toJSON().content as FidusNode[]
         } else {
             this.pmCits = []
         }
 
         // Now we do the same for the bibliography.
-        const cslBib = this.citFm.bibliography
+        const cslBib = this.citFm!.bibliography
         if (cslBib && cslBib[1].length > 0) {
-            this.styles.addReferenceStyle(cslBib[0])
             const bibNode = cslBibSchema.nodeFromJSON({type: "cslbib"})
             const serializer = DOMSerializer.fromSchema(cslBibSchema)
             const dom = serializer.serializeNode(bibNode)
-            dom.innerHTML = cslBib[1].join("")
+            ;(dom as HTMLElement).innerHTML = cslBib[1].join("")
             this.pmBib = DOMParser.fromSchema(cslBibSchema)
                 .parse(dom, {topNode: bibNode})
-                .toJSON()
+                .toJSON() as FidusNode
         }
     }
 }

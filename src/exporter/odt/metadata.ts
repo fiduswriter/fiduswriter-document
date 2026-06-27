@@ -1,15 +1,26 @@
 import {escapeText} from "fwtoolkit"
 
+import type {CSL, ExportMetadata} from "../../types.js"
+import type {XMLElement} from "../tools/xml.js"
+import type {XmlZip} from "../tools/xml_zip.js"
+import type {ODTExporterStyles} from "./styles.js"
+
 export class ODTExporterMetadata {
-    constructor(xml, styles, metadata, csl = null) {
+    xml: XmlZip
+    styles: ODTExporterStyles
+    metadata: ExportMetadata
+    csl: CSL | null
+    metaXml: XMLElement | null
+
+    constructor(xml: XmlZip, styles: ODTExporterStyles, metadata: ExportMetadata, csl: CSL | null = null) {
         this.xml = xml
         this.styles = styles
         this.metadata = metadata
         this.csl = csl
-        this.metaXml = false
+        this.metaXml = null
     }
 
-    init() {
+    init(): Promise<void> {
         return this.xml.getXml("meta.xml").then(metaXml => {
             this.metaXml = metaXml
             this.addMetadata()
@@ -18,8 +29,8 @@ export class ODTExporterMetadata {
         })
     }
 
-    async hasBibliography() {
-        if (!this.csl || !this.metadata.citationStyle) {
+    async hasBibliography(): Promise<string> {
+        if (!this.csl || !this.metadata.citationStyle || !this.csl.getStyle) {
             return "0"
         }
         try {
@@ -34,8 +45,14 @@ export class ODTExporterMetadata {
         }
     }
 
-    addMetadata() {
+    addMetadata(): void {
+        if (!this.metaXml) {
+            return
+        }
         const metaEl = this.metaXml.query("office:meta")
+        if (!metaEl) {
+            return
+        }
 
         // Title
         const titleEl = this.metaXml.query("dc:title")
@@ -49,7 +66,7 @@ export class ODTExporterMetadata {
 
         // Authors
         const authors = this.metadata.authors.map(author => {
-            const nameParts = []
+            const nameParts: string[] = []
             if (author.firstname) {
                 nameParts.push(author.firstname)
             }
@@ -65,7 +82,7 @@ export class ODTExporterMetadata {
 
         const initialAuthor = authors.length
             ? escapeText(authors[0])
-            : gettext("Unknown")
+            : "Unknown"
         // TODO: We likely want to differentiate between first and last author.
         const lastAuthor = initialAuthor
 
@@ -88,7 +105,7 @@ export class ODTExporterMetadata {
         // Remove all existing keywords
         const keywordEls = this.metaXml.queryAll("meta:keywords")
         keywordEls.forEach(keywordEl =>
-            keywordEl.parentElement.removeChild(keywordEl)
+            keywordEl.parentElement!.removeChild(keywordEl)
         )
         // Add new keywords
         const keywords = this.metadata.keywords
@@ -101,20 +118,22 @@ export class ODTExporterMetadata {
         // language
         // LibreOffice seems to ignore the value set in metadata and instead uses
         // the one set in default styles. So we set both.
-        this.styles.setLanguage(this.metadata.language)
+        this.styles.setLanguage(this.metadata.language || "en-US")
         const languageEl = this.metaXml.query("dc:language")
         if (languageEl) {
-            languageEl.innerXML = this.metadata.language
+            languageEl.innerXML = this.metadata.language || "en-US"
         } else {
             metaEl.appendXML(
-                `<dc:language>${this.metadata.language}</dc:language>`
+                `<dc:language>${this.metadata.language || "en-US"}</dc:language>`
             )
         }
         // time
         const date = new Date()
         const dateString = date.toISOString().split(".")[0]
         const createdEl = metaEl.query("meta:creation-date")
-        createdEl.innerXML = dateString
+        if (createdEl) {
+            createdEl.innerXML = dateString
+        }
         const dateEl = this.metaXml.query("dc:date")
         if (dateEl) {
             dateEl.innerXML = `${dateString}.000000000`
@@ -123,24 +142,28 @@ export class ODTExporterMetadata {
         }
     }
 
-    async addZoteroPrefs() {
+    async addZoteroPrefs(): Promise<void> {
         // Add citation style property to meta.xml
-        if (!this.metadata.citationStyle) {
+        if (!this.metadata.citationStyle || !this.metaXml) {
             return Promise.resolve()
         }
 
         const metaEl = this.metaXml.query("office:meta")
+        if (!metaEl) {
+            return Promise.resolve()
+        }
 
         // Remove any existing ZOTERO_PREF_ properties
         const existingZoteroProps = this.metaXml
             .queryAll("meta:user-defined")
             .filter(
-                prop =>
-                    prop.getAttribute("meta:name") &&
-                    prop.getAttribute("meta:name").startsWith("ZOTERO_PREF_")
+                prop => {
+                    const name = String(prop.getAttribute("meta:name"))
+                    return name && name.startsWith("ZOTERO_PREF_")
+                }
             )
         existingZoteroProps.forEach(prop =>
-            prop.parentElement.removeChild(prop)
+            prop.parentElement!.removeChild(prop)
         )
 
         // Determine if the citation style has a bibliography
@@ -154,7 +177,7 @@ export class ODTExporterMetadata {
 
         // Split content into chunks of 378 characters (ODT limit)
         const chunkSize = 378
-        const chunks = []
+        const chunks: string[] = []
         for (let i = 0; i < dataContent.length; i += chunkSize) {
             chunks.push(dataContent.substring(i, i + chunkSize))
         }
@@ -169,25 +192,27 @@ export class ODTExporterMetadata {
         return Promise.resolve()
     }
 
-    addContributorMetadata() {
-        if (!this.metadata.contributors || !this.metadata.contributors.length) {
+    addContributorMetadata(): void {
+        if (!this.metadata.contributors || !this.metadata.contributors.length || !this.metaXml) {
             return
         }
 
         const metaEl = this.metaXml.query("office:meta")
+        if (!metaEl) {
+            return
+        }
 
         // Remove any existing fidus_contributor_ properties
         const existingContributorProps = this.metaXml
             .queryAll("meta:user-defined")
             .filter(
-                prop =>
-                    prop.getAttribute("meta:name") &&
-                    prop
-                        .getAttribute("meta:name")
-                        .startsWith("fidus_contributor_")
+                prop => {
+                    const name = String(prop.getAttribute("meta:name"))
+                    return name && name.startsWith("fidus_contributor_")
+                }
             )
         existingContributorProps.forEach(prop =>
-            prop.parentElement.removeChild(prop)
+            prop.parentElement!.removeChild(prop)
         )
 
         const contributors = this.metadata.contributors
@@ -200,7 +225,7 @@ export class ODTExporterMetadata {
         // Add metadata for each contributor
         contributors.forEach((contributor, index) => {
             const num = index + 1
-            const nameParts = []
+            const nameParts: string[] = []
             if (contributor.firstname) {
                 nameParts.push(contributor.firstname)
             }

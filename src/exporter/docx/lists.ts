@@ -1,4 +1,8 @@
 import {descendantNodes} from "../tools/doc_content.js"
+import type {FidusNode} from "../../types.js"
+import type {XMLElement} from "../tools/xml.js"
+import type {XmlZip} from "../tools/xml_zip.js"
+import type {DOCXExporterRels} from "./rels.js"
 
 const DEFAULT_LISTPARAGRAPH_XML = `
     <w:style w:type="paragraph" w:styleId="ListParagraph">
@@ -19,56 +23,68 @@ const DEFAULT_NUMBERING_XML = `<?xml version="1.0" encoding="UTF-8" standalone="
     </w:numbering>`
 
 export class DOCXExporterLists {
-    constructor(docContent, xml, rels) {
+    docContent: FidusNode
+    xml: XmlZip
+    rels: DOCXExporterRels
+    useBulletList: boolean
+    usedNumberedList: number[]
+    styleXML: XMLElement | null
+    numberingXML: XMLElement | null
+    abstractNumIdCounter: number
+    numIdCounter: number
+    // We only need one bulletType for all bullet lists, but a new
+    // numberedType for each numbered list so that the numbering starts in 1
+    // each time.
+    bulletType: number | false
+    bulletAbstractType: number | undefined
+    numberFormat: string | null
+    numberedTypes: number[]
+    numberedAbstractType: number | undefined
+    styleFilePath: string
+    numberingFilePath: string
+    ctFilePath: string
+    ctXML: XMLElement | null
+
+    constructor(docContent: FidusNode, xml: XmlZip, rels: DOCXExporterRels) {
         this.docContent = docContent
         this.xml = xml
         this.rels = rels
         this.useBulletList = false
         this.usedNumberedList = []
-        this.styleXML = false
-        this.numberingXML = false
+        this.styleXML = null
+        this.numberingXML = null
         this.abstractNumIdCounter = 0
         this.numIdCounter = 0
-        // We only need one bulletType for all bullet lists, but a new
-        // numberedType for each numbered list so that the numbering starts in 1
-        // each time.
         this.bulletType = false
         this.numberFormat = "decimal"
         this.numberedTypes = []
         this.styleFilePath = "word/styles.xml"
         this.numberingFilePath = "word/numbering.xml"
         this.ctFilePath = "[Content_Types].xml"
+        this.ctXML = null
     }
 
-    init() {
+    init(): Promise<void> | Promise<undefined> {
         this.findLists()
         if (this.usedNumberedList.length > 0 || this.useBulletList) {
-            const p = []
-
-            p.push(
+            const p: Array<Promise<void>> = [
                 new Promise(resolve => {
                     this.initCt().then(() => resolve())
-                })
-            )
-
-            p.push(
+                }),
                 new Promise(resolve => {
                     this.addNumberingXml().then(() => resolve())
-                })
-            )
-
-            p.push(
+                }),
                 new Promise(resolve => {
                     this.addListParagraphStyle().then(() => resolve())
                 })
-            )
-            return Promise.all(p)
+            ]
+            return Promise.all(p).then(() => undefined)
         } else {
             return Promise.resolve()
         }
     }
 
-    initCt() {
+    initCt(): Promise<void> {
         return this.xml.getXml(this.ctFilePath).then(ctXML => {
             this.ctXML = ctXML
             this.addRelsToCt()
@@ -76,29 +92,32 @@ export class DOCXExporterLists {
         })
     }
 
-    addRelsToCt() {
+    addRelsToCt(): void {
+        if (!this.ctXML) {
+            return
+        }
         const override = this.ctXML.query("Override", {
             PartName: `/${this.numberingFilePath}`
         })
         if (!override) {
             const types = this.ctXML.query("Types")
-            types.appendXML(
+            types?.appendXML(
                 `<Override PartName="/${this.numberingFilePath}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>`
             )
         }
     }
 
-    findLists() {
+    findLists(): void {
         descendantNodes(this.docContent).forEach(node => {
             if (node.type === "bullet_list") {
                 this.useBulletList = true
             } else if (node.type === "ordered_list") {
-                this.usedNumberedList.push(node.attrs.order)
+                this.usedNumberedList.push(node.attrs?.order as number)
             }
         })
     }
 
-    addNumberingXml() {
+    addNumberingXml(): Promise<void> {
         return this.xml
             .getXml(this.numberingFilePath, DEFAULT_NUMBERING_XML)
             .then(numberingXML => {
@@ -109,20 +128,23 @@ export class DOCXExporterLists {
             })
     }
 
-    addListParagraphStyle() {
+    addListParagraphStyle(): Promise<void> {
         return this.xml.getXml(this.styleFilePath).then(styleXML => {
             this.styleXML = styleXML
             if (
                 !this.styleXML.query("w:style", {"w:styleId": "ListParagraph"})
             ) {
                 const stylesEl = this.styleXML.query("w:styles")
-                stylesEl.appendXML(DEFAULT_LISTPARAGRAPH_XML)
+                stylesEl?.appendXML(DEFAULT_LISTPARAGRAPH_XML)
             }
             return Promise.resolve()
         })
     }
 
-    addUsedListTypes() {
+    addUsedListTypes(): void {
+        if (!this.numberingXML) {
+            return
+        }
         const allAbstractNum = this.numberingXML.queryAll("w:abstractNum")
         allAbstractNum.forEach(abstractNum => {
             // We check the format for the lowest level list and use the first
@@ -130,18 +152,24 @@ export class DOCXExporterLists {
             // This means that if a list is defined using anything else than
             // bullets, it will be accepted as the format of
             // the numeric list.
-            const levelZeroFormat = abstractNum
+            const levelZeroFormatEl = abstractNum
                 .query("w:lvl", {"w:ilvl": "0"})
-                .query("w:numFmt")
-                .getAttribute("w:val")
+                ?.query("w:numFmt")
+            const levelZeroFormat = levelZeroFormatEl
+                ? String(levelZeroFormatEl.getAttribute("w:val"))
+                : ""
             const abstractNumId = Number.parseInt(
-                abstractNum.getAttribute("w:abstractNumId")
+                String(abstractNum.getAttribute("w:abstractNumId"))
             )
             if (levelZeroFormat === "bullet" && !this.bulletAbstractType) {
-                const numEl = this.numberingXML.query("w:abstractNumId", {
-                    "w:val": abstractNumId
-                }).parentElement
-                const numId = Number.parseInt(numEl.getAttribute("w:numId"))
+                const numEl = this.numberingXML!
+                    .query("w:abstractNumId", {
+                        "w:val": abstractNumId
+                    })
+                    ?.parentElement
+                const numId = numEl
+                    ? Number.parseInt(String(numEl.getAttribute("w:numId")))
+                    : NaN
                 this.bulletType = numId
             } else if (levelZeroFormat !== "bullet" && !this.numberFormat) {
                 this.numberFormat = levelZeroFormat
@@ -152,7 +180,7 @@ export class DOCXExporterLists {
         })
         const allNum = this.numberingXML.queryAll("w:num")
         allNum.forEach(numEl => {
-            const numId = Number.parseInt(numEl.getAttribute("w:val"))
+            const numId = Number.parseInt(String(numEl.getAttribute("w:val")))
             if (this.numIdCounter < numId) {
                 this.numIdCounter = numId
             }
@@ -177,17 +205,20 @@ export class DOCXExporterLists {
         }
     }
 
-    getBulletType() {
+    getBulletType(): number | false {
         return this.bulletType
     }
 
-    getNumberedType() {
+    getNumberedType(): number | undefined {
         return this.numberedTypes.shift()
     }
 
-    addBulletNumType(numId, abstractNumId) {
+    addBulletNumType(numId: number, abstractNumId: number): void {
+        if (!this.numberingXML) {
+            return
+        }
         const numberingEl = this.numberingXML.query("w:numbering")
-        numberingEl.appendXML(`
+        numberingEl?.appendXML(`
             <w:abstractNum w:abstractNumId="${abstractNumId}" w15:restartNumberingAfterBreak="0">
                 <w:nsid w:val="3620195A" />
                 <w:multiLevelType w:val="hybridMultilevel" />
@@ -200,6 +231,9 @@ export class DOCXExporterLists {
         const newAbstractNum = this.numberingXML.query("w:abstractNum", {
             "w:abstractNumId": String(abstractNumId)
         })
+        if (!newAbstractNum) {
+            return
+        }
         // Definition seem to always define 9 levels (0-8).
         for (let level = 0; level < 9; level++) {
             newAbstractNum.appendXML(`
@@ -219,20 +253,26 @@ export class DOCXExporterLists {
         }
     }
 
-    addNumberedNumType(numId, start) {
+    addNumberedNumType(numId: number, start: number): void {
         this.abstractNumIdCounter++
         this.addNumberedAbstractNumType(this.abstractNumIdCounter, start)
+        if (!this.numberingXML) {
+            return
+        }
         const numberingEl = this.numberingXML.query("w:numbering")
-        numberingEl.appendXML(`
+        numberingEl?.appendXML(`
             <w:num w:numId="${numId}">
                 <w:abstractNumId w:val="${this.abstractNumIdCounter}" />
             </w:num>
         `)
     }
 
-    addNumberedAbstractNumType(abstractNumId, start) {
+    addNumberedAbstractNumType(abstractNumId: number, start: number): void {
+        if (!this.numberingXML) {
+            return
+        }
         const numberingEl = this.numberingXML.query("w:numbering")
-        numberingEl.appendXML(`
+        numberingEl?.appendXML(`
             <w:abstractNum w:abstractNumId="${abstractNumId}" w15:restartNumberingAfterBreak="0">
                 <w:nsid w:val="7F6635F3" />
                 <w:multiLevelType w:val="hybridMultilevel" />
@@ -242,6 +282,9 @@ export class DOCXExporterLists {
         const newAbstractNum = this.numberingXML.query("w:abstractNum", {
             "w:abstractNumId": String(abstractNumId)
         })
+        if (!newAbstractNum) {
+            return
+        }
         // Definition seem to always define 9 levels (0-8).
         for (let level = 0; level < 9; level++) {
             newAbstractNum.appendXML(`

@@ -1,6 +1,10 @@
 import {descendantNodes} from "../tools/doc_content.js"
+import type {BibDB, CSL, DocSettings, FidusNode, ImageDB} from "../../types.js"
+import type {XMLElement} from "../tools/xml.js"
+import type {XmlZip} from "../tools/xml_zip.js"
 import {ODTExporterCitations} from "./citations.js"
 import {ODTExporterImages} from "./images.js"
+import type {ODTExporterStyles} from "./styles.js"
 
 const DEFAULT_STYLE_FOOTNOTE = `
     <style:style style:name="Footnote" style:family="paragraph" style:parent-style-name="Standard" style:class="extra">
@@ -23,15 +27,32 @@ const DEFAULT_STYLE_FOOTNOTE_CONFIGURATION = `
     `
 
 export class ODTExporterFootnotes {
+    docContent: FidusNode
+    settings: DocSettings
+    xml: XmlZip
+    bodyCitations: ODTExporterCitations
+    styles: ODTExporterStyles
+    bibDB: BibDB
+    imageDB: ImageDB
+    csl: CSL
+
+    pmBib: FidusNode | false
+    fnPmJSON: FidusNode | false
+    images: ODTExporterImages | null
+    citations: ODTExporterCitations | null
+    footnotes: FidusNode[][]
+    styleFilePath: string
+    styleXml: XMLElement | null
+
     constructor(
-        docContent,
-        settings,
-        xml,
-        bodyCitations,
-        styles,
-        bibDB,
-        imageDB,
-        csl
+        docContent: FidusNode,
+        settings: DocSettings,
+        xml: XmlZip,
+        bodyCitations: ODTExporterCitations,
+        styles: ODTExporterStyles,
+        bibDB: BibDB,
+        imageDB: ImageDB,
+        csl: CSL
     ) {
         this.docContent = docContent
         this.settings = settings
@@ -44,24 +65,26 @@ export class ODTExporterFootnotes {
 
         this.pmBib = false
         this.fnPmJSON = false
-        this.images = false
-        this.citations = false
+        this.images = null
+        this.citations = null
         this.footnotes = []
         this.styleFilePath = "styles.xml"
+        this.styleXml = null
     }
 
-    init() {
+    init(): Promise<void> | Promise<undefined> {
         this.findFootnotes()
         if (
             this.footnotes.length ||
-            (this.bodyCitations.citFm.citationType === "note" &&
+            (this.bodyCitations.citFm &&
+                this.bodyCitations.citFm.citationType === "note" &&
                 this.bodyCitations.citInfos.length)
         ) {
             this.convertFootnotes()
             // Include the citinfos from the main document so that they will be
             // used for calculating the bibliography as well
             this.citations = new ODTExporterCitations(
-                this.fnPmJSON,
+                this.fnPmJSON as FidusNode,
                 this.settings,
                 this.styles,
                 this.bibDB,
@@ -69,7 +92,7 @@ export class ODTExporterFootnotes {
                 this.bodyCitations.citInfos
             )
             this.images = new ODTExporterImages(
-                this.fnPmJSON,
+                this.fnPmJSON as FidusNode,
                 this.xml,
                 this.imageDB
             )
@@ -79,8 +102,8 @@ export class ODTExporterFootnotes {
                 .then(() => {
                     // Replace the main bibliography with the new one that includes
                     // both citations in main document and in the footnotes.
-                    this.pmBib = this.citations.pmBib
-                    return this.images.init()
+                    this.pmBib = this.citations!.pmBib
+                    return this.images!.init()
                 })
                 .then(() => {
                     return this.addStyles()
@@ -91,7 +114,7 @@ export class ODTExporterFootnotes {
         }
     }
 
-    addStyles() {
+    addStyles(): Promise<void> {
         return this.xml.getXml(this.styleFilePath).then(styleXml => {
             this.styleXml = styleXml
             this.addStyle("Footnote", DEFAULT_STYLE_FOOTNOTE)
@@ -102,37 +125,37 @@ export class ODTExporterFootnotes {
         })
     }
 
-    addStyle(styleName, xml) {
-        if (!this.styleXml.query("style:style", {"style:name": styleName})) {
-            const stylesEl = this.styleXml.query("office:styles")
-            stylesEl.appendXML(xml)
+    addStyle(styleName: string, xml: string): void {
+        if (!this.styleXml!.query("style:style", {"style:name": styleName})) {
+            const stylesEl = this.styleXml!.query("office:styles")
+            stylesEl?.appendXML(xml)
         }
     }
 
-    setStyleConfig() {
-        const oldFnStyleConfigEl = this.styleXml.query(
+    setStyleConfig(): void {
+        const oldFnStyleConfigEl = this.styleXml!.query(
             "text:notes-configuration",
             {
                 "text:note-class": "footnote"
             }
         )
         if (oldFnStyleConfigEl) {
-            oldFnStyleConfigEl.parentElement.removeChild(oldFnStyleConfigEl)
+            oldFnStyleConfigEl.parentElement!.removeChild(oldFnStyleConfigEl)
         }
-        const stylesEl = this.styleXml.query("office:styles")
-        stylesEl.appendXML(DEFAULT_STYLE_FOOTNOTE_CONFIGURATION)
+        const stylesEl = this.styleXml!.query("office:styles")
+        stylesEl?.appendXML(DEFAULT_STYLE_FOOTNOTE_CONFIGURATION)
     }
 
-    findFootnotes() {
+    findFootnotes(): void {
         descendantNodes(this.docContent).forEach(node => {
             if (node.type === "footnote") {
-                this.footnotes.push(node.attrs.footnote)
+                this.footnotes.push(node.attrs?.footnote as FidusNode[])
             }
         })
     }
 
-    convertFootnotes() {
-        const fnContent = []
+    convertFootnotes(): void {
+        const fnContent: FidusNode[] = []
         this.footnotes.forEach(footnote => {
             fnContent.push({
                 type: "footnotecontainer",

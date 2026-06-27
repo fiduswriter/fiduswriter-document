@@ -1,4 +1,7 @@
 import {descendantNodes} from "../tools/doc_content.js"
+import type {BibDB, CSL, DocSettings, ExportDoc, FidusNode, ImageDB} from "../../types.js"
+import type {XmlZip} from "../tools/xml_zip.js"
+import type {XMLElement} from "../tools/xml.js"
 import {DOCXExporterCitations} from "./citations.js"
 import {DOCXExporterImages} from "./images.js"
 import {DOCXExporterLists} from "./lists.js"
@@ -52,19 +55,48 @@ const DEFAULT_STYLE_FOOTNOTE_ANCHOR = `
     `
 
 export class DOCXExporterFootnotes {
+    doc: ExportDoc
+    docContent: FidusNode
+    settings: DocSettings
+    imageDB: ImageDB
+    bibDB: BibDB
+    xml: XmlZip
+    citations: DOCXExporterCitations
+    csl: CSL
+    lists: DOCXExporterLists
+    math: any
+    tables: any
+    rels: DOCXExporterRels
+
+    pmBib: FidusNode | false
+    fnPmJSON: FidusNode | false
+    images: DOCXExporterImages | null
+    augmentedCitations: DOCXExporterCitations | null
+    footnotes: FidusNode[][]
+    fnXML: string | null
+    fnRels: DOCXExporterRels | null
+    ctXML: XMLElement | null
+    styleXML: XMLElement | null
+    settingsXML: XMLElement | null
+    filePath: string
+    ctFilePath: string
+    settingsFilePath: string
+    styleFilePath: string
+    richtext: any
+
     constructor(
-        doc,
-        docContent,
-        settings,
-        imageDB,
-        bibDB,
-        xml,
-        citations,
-        csl,
-        lists,
-        math,
-        tables,
-        rels
+        doc: ExportDoc,
+        docContent: FidusNode,
+        settings: DocSettings,
+        imageDB: ImageDB,
+        bibDB: BibDB,
+        xml: XmlZip,
+        citations: DOCXExporterCitations,
+        csl: CSL,
+        lists: DOCXExporterLists,
+        math: any,
+        tables: any,
+        rels: DOCXExporterRels
     ) {
         this.doc = doc
         this.docContent = docContent
@@ -81,23 +113,26 @@ export class DOCXExporterFootnotes {
 
         this.pmBib = false
         this.fnPmJSON = false
-        this.images = false
-        this.augmentedCitations = false
+        this.images = null
+        this.augmentedCitations = null
         this.footnotes = [] // footnotes
-        this.fnXML = false
-        this.ctXML = false
-        this.styleXML = false
+        this.fnXML = null
+        this.fnRels = null
+        this.ctXML = null
+        this.styleXML = null
+        this.settingsXML = null
         this.filePath = "word/footnotes.xml"
         this.ctFilePath = "[Content_Types].xml"
         this.settingsFilePath = "word/settings.xml"
         this.styleFilePath = "word/styles.xml"
     }
 
-    init() {
+    init(): Promise<void> | Promise<undefined> {
         this.findFootnotes()
         if (
             this.footnotes.length ||
-            (this.citations.citFm.citationType === "note" &&
+            (this.citations.citFm &&
+                this.citations.citFm.citationType === "note" &&
                 this.citations.citInfos.length)
         ) {
             this.convertFootnotes()
@@ -105,7 +140,7 @@ export class DOCXExporterFootnotes {
             // Include the citinfos from the main body document so that they will be
             // used for calculating the bibliography as well
             this.augmentedCitations = new DOCXExporterCitations(
-                this.fnPmJSON,
+                this.fnPmJSON as FidusNode,
                 this.settings,
                 this.bibDB,
                 this.csl,
@@ -114,13 +149,13 @@ export class DOCXExporterFootnotes {
             )
 
             this.images = new DOCXExporterImages(
-                this.fnPmJSON,
+                this.fnPmJSON as FidusNode,
                 this.imageDB,
                 this.xml,
                 this.fnRels
             )
             this.lists = new DOCXExporterLists(
-                this.fnPmJSON,
+                this.fnPmJSON as FidusNode,
                 this.xml,
                 this.fnRels
             )
@@ -131,10 +166,10 @@ export class DOCXExporterFootnotes {
                     // Replace the main bibliography with the new one that
                     // includes both citations in main document
                     // and in the footnotes.
-                    this.pmBib = this.augmentedCitations.pmBib
-                    return this.fnRels.init()
+                    this.pmBib = this.augmentedCitations!.pmBib
+                    return this.fnRels!.init()
                 })
-                .then(() => this.images.init())
+                .then(() => this.images!.init())
                 .then(() => this.lists.init())
                 .then(() => this.initCt())
                 .then(() => this.setSettings())
@@ -146,7 +181,7 @@ export class DOCXExporterFootnotes {
         }
     }
 
-    initCt() {
+    initCt(): Promise<void> {
         return this.xml.getXml(this.ctFilePath).then(ctXML => {
             this.ctXML = ctXML
             this.addRelsToCt()
@@ -154,19 +189,22 @@ export class DOCXExporterFootnotes {
         })
     }
 
-    addRelsToCt() {
+    addRelsToCt(): void {
+        if (!this.ctXML) {
+            return
+        }
         const override = this.ctXML.query("Override", {
             PartName: `/${this.filePath}`
         })
         if (!override) {
             const types = this.ctXML.query("Types")
-            types.appendXML(
+            types?.appendXML(
                 `<Override PartName="/${this.filePath}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>`
             )
         }
     }
 
-    addStyles() {
+    addStyles(): Promise<void> {
         return this.xml.getXml(this.styleFilePath).then(styleXML => {
             this.styleXML = styleXML
             this.addStyle("Footnote", DEFAULT_STYLE_FOOTNOTE)
@@ -175,23 +213,23 @@ export class DOCXExporterFootnotes {
         })
     }
 
-    addStyle(styleName, xml) {
-        if (!this.styleXML.query("w:style", {"w:styleId": styleName})) {
-            const stylesEl = this.styleXML.query("w:styles")
-            stylesEl.appendXML(xml)
+    addStyle(styleName: string, xml: string): void {
+        if (!this.styleXML!.query("w:style", {"w:styleId": styleName})) {
+            const stylesEl = this.styleXML!.query("w:styles")
+            stylesEl?.appendXML(xml)
         }
     }
 
-    findFootnotes() {
+    findFootnotes(): void {
         descendantNodes(this.docContent).forEach(node => {
             if (node.type === "footnote") {
-                this.footnotes.push(node.attrs.footnote)
+                this.footnotes.push(node.attrs?.footnote as FidusNode[])
             }
         })
     }
 
-    convertFootnotes() {
-        const fnContent = []
+    convertFootnotes(): void {
+        const fnContent: FidusNode[] = []
         this.footnotes.forEach(footnote => {
             fnContent.push({
                 type: "footnotecontainer",
@@ -204,7 +242,7 @@ export class DOCXExporterFootnotes {
         }
     }
 
-    createXml() {
+    createXml(): Promise<void> {
         this.richtext = new DOCXExporterRichtext(
             this.doc,
             this.lists,
@@ -221,17 +259,18 @@ export class DOCXExporterFootnotes {
         this.rels.addFootnoteRel()
         return this.xml.getXml(this.filePath, DEFAULT_XML).then(xml => {
             const footnotesEl = xml.query("w:footnotes")
-            footnotesEl.appendXML(this.fnXML)
-            this.xml = xml
+            footnotesEl?.appendXML(this.fnXML as string)
+            // Note: original code reassigned this.xml to the XMLElement here;
+            // that is not needed and conflicts with the XmlZip type.
         })
     }
 
-    setSettings() {
+    setSettings(): Promise<void> {
         return this.xml.getXml(this.settingsFilePath).then(settingsXML => {
             const footnotePr = settingsXML.query("w:footnotePr")
             if (!footnotePr) {
                 const settingsEl = settingsXML.query("w:settings")
-                settingsEl.appendXML(DEFAULT_SETTINGS_XML)
+                settingsEl?.appendXML(DEFAULT_SETTINGS_XML)
             }
             this.settingsXML = settingsXML
             return Promise.resolve()

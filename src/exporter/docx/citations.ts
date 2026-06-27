@@ -3,10 +3,28 @@ import {DOMParser, DOMSerializer} from "prosemirror-model"
 import {cslBibSchema} from "../../bibliography/csl_bib.js"
 import {FormatCitations} from "../../citations/format.js"
 import {fnSchema} from "../../schema/footnotes.js"
+import type {BibDB, CSL, DocSettings, FidusNode} from "../../types.js"
 import {descendantNodes} from "../tools/doc_content.js"
+import type {XMLElement} from "../tools/xml.js"
+import type {XmlZip} from "../tools/xml_zip.js"
 
 export class DOCXExporterCitations {
-    constructor(docContent, settings, bibDB, csl, xml, origCitInfos = []) {
+    docContent: FidusNode
+    settings: DocSettings
+    bibDB: BibDB
+    csl: CSL
+    xml: XmlZip
+    origCitInfos: Record<string, unknown>[]
+
+    citInfos: Record<string, unknown>[]
+    citationTexts: string[]
+    pmCits: FidusNode[]
+    citFm: FormatCitations | false
+    pmBib: FidusNode | false
+    styleXML: XMLElement | null
+    styleFilePath: string
+
+    constructor(docContent: FidusNode, settings: DocSettings, bibDB: BibDB, csl: CSL, xml: XmlZip, origCitInfos: Record<string, unknown>[] = []) {
         this.docContent = docContent
         this.settings = settings
         this.bibDB = bibDB
@@ -19,11 +37,11 @@ export class DOCXExporterCitations {
         this.pmCits = []
         this.citFm = false
         this.pmBib = false
-        this.styleXML = false
+        this.styleXML = null
         this.styleFilePath = "word/styles.xml"
     }
 
-    init() {
+    init(): Promise<void> {
         return this.xml
             .getXml(this.styleFilePath)
             .then(styleXML => {
@@ -35,7 +53,7 @@ export class DOCXExporterCitations {
 
     // Citations are highly interdependent -- so we need to format them all
     // together before laying out the document.
-    formatCitations() {
+    formatCitations(): Promise<void> {
         if (this.origCitInfos.length) {
             // Initial citInfos are taken from a previous run to include in bibliography,
             // and they are removed before spitting out the citation entries for the given document.
@@ -44,21 +62,22 @@ export class DOCXExporterCitations {
         }
 
         descendantNodes(this.docContent).forEach(node => {
-            if (node.type === "citation") {
+            if (node.type === "citation" && node.attrs) {
                 this.citInfos.push(JSON.parse(JSON.stringify(node.attrs)))
             }
         })
-        this.citFm = new FormatCitations(
+        const citFm = new FormatCitations(
             this.csl,
-            this.citInfos,
-            this.settings.citationstyle,
+            this.citInfos as any,
+            this.settings.citationstyle || "",
             "",
             this.bibDB,
             false,
             this.settings.language
         )
-        return this.citFm.init().then(() => {
-            this.citationTexts = this.citFm.citationTexts
+        this.citFm = citFm
+        return (citFm.init() as Promise<void>).then(() => {
+            this.citationTexts = citFm.citationTexts
             if (this.origCitInfos.length) {
                 // Remove all citation texts originating from original starting citInfos
                 this.citationTexts.splice(0, this.origCitInfos.length)
@@ -68,7 +87,10 @@ export class DOCXExporterCitations {
         })
     }
 
-    convertCitations() {
+    convertCitations(): void {
+        if (!this.citFm) {
+            return
+        }
         // There could be some formatting in the citations, so we parse them through the PM schema for final formatting.
         // We need to put the citations each in a paragraph so that it works with
         // the fiduswriter schema and so that the converter doesn't mash them together.
@@ -83,30 +105,36 @@ export class DOCXExporterCitations {
 
             const serializer = DOMSerializer.fromSchema(fnSchema)
             const dom = serializer.serializeNode(fnNode)
-            dom.innerHTML = citationsHTML
+            ;(dom as HTMLElement).innerHTML = citationsHTML
             this.pmCits = DOMParser.fromSchema(fnSchema)
                 .parse(dom, {topNode: fnNode})
-                .toJSON().content
+                .toJSON().content as FidusNode[]
         }
 
         // Now we do the same for the bibliography.
-        const cslBib = this.citFm.bibliography
+        const cslBib = this.citFm!.bibliography
         if (cslBib && cslBib[1].length > 0) {
             this.addReferenceStyle(cslBib[0])
             const bibNode = cslBibSchema.nodeFromJSON({type: "cslbib"})
             const cslSerializer = DOMSerializer.fromSchema(cslBibSchema)
             const dom = cslSerializer.serializeNode(bibNode)
-            dom.innerHTML = cslBib[1].join("")
+            ;(dom as HTMLElement).innerHTML = cslBib[1].join("")
             this.pmBib = DOMParser.fromSchema(cslBibSchema)
                 .parse(dom, {topNode: bibNode})
-                .toJSON()
+                .toJSON() as FidusNode
         }
     }
 
-    addReferenceStyle(bibInfo) {
-        const stylesEl = this.styleXML.query("w:styles")
+    addReferenceStyle(bibInfo: {
+        linespacing: number
+        entryspacing: number
+        hangingindent?: boolean
+        maxoffset: number
+        "second-field-align"?: "margin" | "flush"
+    }): void {
+        const stylesEl = this.styleXML!.query("w:styles")
         if (
-            !this.styleXML.query("w:style", {
+            !this.styleXML!.query("w:style", {
                 "w:styleId": "BibliographyHeading"
             })
         ) {
@@ -126,15 +154,15 @@ export class DOCXExporterCitations {
                         <w:szCs w:val="32"/>
                     </w:rPr>
                 </w:style>`
-            stylesEl.appendXML(headingStyleDef)
+            stylesEl?.appendXML(headingStyleDef)
         }
         // The style called "Bibliography" will override any previous style
         // of the same name.
-        const stylesParStyle = this.styleXML.query("w:style", {
+        const stylesParStyle = this.styleXML!.query("w:style", {
             "w:styleId": "Bibliography"
         })
         if (stylesParStyle) {
-            stylesParStyle.parentElement.removeChild(stylesParStyle)
+            stylesParStyle.parentElement!.removeChild(stylesParStyle)
         }
 
         const lineHeight = 240 * bibInfo.linespacing
@@ -172,6 +200,6 @@ export class DOCXExporterCitations {
                 <w:rPr></w:rPr>
             </w:style>`
 
-        stylesEl.appendXML(styleDef)
+        stylesEl?.appendXML(styleDef)
     }
 }

@@ -1,25 +1,42 @@
 import {printHTML} from "@vivliostyle/print"
-import {addAlert, shortFileTitle} from "fwtoolkit"
+import {addAlert, shortFileTitle, gettext, staticUrl} from "fwtoolkit"
+
 import {PAPER_SIZES} from "../../schema/const.js"
+import type {ExportDoc} from "../../types.js"
 import {HTMLExporter} from "../html/index.js"
 import {HTMLExporterConvert} from "../html/convert.js"
 import {removeHidden} from "../tools/doc_content.js"
 
 export class PrintExporter extends HTMLExporter {
-    constructor(doc, bibDB, imageDB, csl, updated, documentStyles) {
+    constructor(
+        doc: ExportDoc,
+        bibDB: unknown,
+        imageDB: unknown,
+        csl: unknown,
+        updated: unknown,
+        documentStyles: Array<{
+            slug: string
+            contents: string
+            documentstylefile_set: Array<[string, string]>
+        }>
+    ) {
         super(doc, bibDB, imageDB, csl, updated, documentStyles, {
             relativeUrls: false
         })
     }
 
-    async init() {
+    async init(): Promise<void> {
         addAlert(
             "info",
             `${shortFileTitle(this.doc.title, this.doc.path)}: ${gettext("Printing has been initiated.")}`
         )
-        this.docContent = removeHidden(this.doc.content)
+        this.docContent = removeHidden(this.doc.content) as any
 
-        const styleSheets = [
+        const styleSheets: Array<{
+            url?: string
+            contents?: string
+            filename?: string
+        }> = [
             {url: staticUrl("css/document.css")},
             {
                 contents: `a.footnote, a.affiliation {
@@ -84,7 +101,7 @@ export class PrintExporter extends HTMLExporter {
                     background-color: white;
                 }
                 @page {
-                    size: ${PAPER_SIZES.find(size => size[0] === this.doc.settings.papersize)[1]};
+                    size: ${(PAPER_SIZES.find(size => size[0] === this.doc.settings.papersize) || ["", "A4"])[1]};
                     @top-center {
                         content: env(doc-title);
                     }
@@ -121,18 +138,20 @@ export class PrintExporter extends HTMLExporter {
 
         const {html, metaData} = await this.converter.init()
 
-        const config = {title: metaData.title}
+        const config: {title?: string; printCallback?: (iframeWin: Window) => void} = {
+            title: metaData.title
+        }
 
         if (navigator.userAgent.includes("Gecko/")) {
             // Firefox has issues printing images when in iframe. This workaround can be
             // removed once that has been fixed. TODO: Add gecko bug number if there is one.
             config.printCallback = iframeWin => {
                 const oldBody = document.body
-                document.body.parentElement.dataset.vivliostylePaginated = true
+                document.body.parentElement!.dataset.vivliostylePaginated = "true"
                 document.body = iframeWin.document.body
                 document.body
                     .querySelectorAll("figure, table")
-                    .forEach(el => delete el.dataset.category)
+                    .forEach(el => delete (el as HTMLElement).dataset.category)
                 iframeWin.document
                     .querySelectorAll("style")
                     .forEach(el => document.body.appendChild(el))
@@ -141,33 +160,33 @@ export class PrintExporter extends HTMLExporter {
                 document.body.appendChild(backgroundStyle)
                 window.print()
                 document.body = oldBody
-                delete document.body.parentElement.dataset.vivliostylePaginated
+                delete document.body.parentElement!.dataset.vivliostylePaginated
             }
         }
-        return printHTML(html, config)
+        await printHTML(html, config)
     }
 
-    getDocStyle(doc) {
+    getDocStyle(doc: ExportDoc): {contents: string; filename: string} | false {
         // Override the default as we need to use the original URLs in print.
         const docStyle = this.documentStyles.find(
-            docStyle => docStyle.slug === doc.settings.documentstyle
+            (ds: {slug: string}) => ds.slug === doc.settings.documentstyle
         )
         if (!docStyle) {
-            return
+            return false
         }
 
         let contents = docStyle.contents
         docStyle.documentstylefile_set.forEach(
-            ([url, filename]) =>
+            ([url, filename]: [string, string]) =>
                 (contents = contents.replace(
                     new RegExp(filename, "g"),
-                    new URL(url, window.location).href
+                    new URL(url, window.location.href).href
                 ))
         )
-        return {contents}
+        return {contents, filename: ""}
     }
 
-    loadStyle(sheet) {
+    loadStyle(sheet: {url?: string; filename?: string; contents?: string}): Promise<void> {
         if (sheet.url) {
             sheet.filename = sheet.url
             delete sheet.url

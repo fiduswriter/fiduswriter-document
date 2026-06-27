@@ -1,15 +1,25 @@
 import {escapeText} from "fwtoolkit"
 
+import type {CSL, CSLStyle, ExportMetadata} from "../../types.js"
+import type {XMLElement} from "../tools/xml.js"
+import type {XmlZip} from "../tools/xml_zip.js"
+
 export class DOCXExporterMetadata {
-    constructor(xml, metadata, csl = null) {
+    xml: XmlZip
+    metadata: ExportMetadata
+    csl: CSL | null
+    coreXML: XMLElement | null
+    customXML: XMLElement | null
+
+    constructor(xml: XmlZip, metadata: ExportMetadata, csl: CSL | null = null) {
         this.xml = xml
         this.metadata = metadata
         this.csl = csl
-        this.coreXML = false
-        this.customXML = false
+        this.coreXML = null
+        this.customXML = null
     }
 
-    init() {
+    init(): Promise<void> {
         return this.xml.getXml("docProps/core.xml").then(coreXML => {
             this.coreXML = coreXML
             this.addMetadata()
@@ -17,8 +27,8 @@ export class DOCXExporterMetadata {
         })
     }
 
-    async hasBibliography() {
-        if (!this.csl || !this.metadata.citationStyle) {
+    async hasBibliography(): Promise<string> {
+        if (!this.csl || !this.metadata.citationStyle || !this.csl.getStyle) {
             return "0"
         }
         try {
@@ -33,20 +43,28 @@ export class DOCXExporterMetadata {
         }
     }
 
-    addMetadata() {
+    addMetadata(): void {
+        if (!this.coreXML) {
+            return
+        }
         const corePropertiesEl = this.coreXML.query("cp:coreProperties")
+        if (!corePropertiesEl) {
+            return
+        }
 
         // Title
-        let titleEl = this.coreXML.query("dc:title")
+        let titleEl: XMLElement | null = this.coreXML.query("dc:title") ?? null
         if (!titleEl) {
             corePropertiesEl.appendXML("<dc:title></dc:title>")
             titleEl = corePropertiesEl.lastElementChild
         }
-        titleEl.innerXML = escapeText(this.metadata.title)
+        if (titleEl) {
+            titleEl.innerXML = escapeText(this.metadata.title)
+        }
         // Authors
 
         const authors = this.metadata.authors.map(author => {
-            const nameParts = []
+            const nameParts: string[] = []
             if (author.firstname) {
                 nameParts.push(author.firstname)
             }
@@ -61,55 +79,65 @@ export class DOCXExporterMetadata {
         })
         const lastAuthor = authors.length
             ? escapeText(authors[0])
-            : gettext("Unknown")
+            : "Unknown"
         const allAuthors = authors.length
             ? escapeText(authors.join(";"))
-            : gettext("Unknown")
-        let allAuthorsEl = this.coreXML.query("dc:creator")
+            : "Unknown"
+        let allAuthorsEl: XMLElement | null = this.coreXML.query("dc:creator") ?? null
 
         if (!allAuthorsEl) {
             corePropertiesEl.appendXML("<dc:creator></dc:creator>")
             allAuthorsEl = corePropertiesEl.lastElementChild
         }
-        allAuthorsEl.innerXML = allAuthors
-        let lastAuthorEl = this.coreXML.query("dc:lastModifiedBy")
+        if (allAuthorsEl) {
+            allAuthorsEl.innerXML = allAuthors
+        }
+        let lastAuthorEl: XMLElement | null = this.coreXML.query("dc:lastModifiedBy") ?? null
         if (!lastAuthorEl) {
             corePropertiesEl.appendXML(
                 "<dc:lastModifiedBy></dc:lastModifiedBy>"
             )
             lastAuthorEl = corePropertiesEl.lastElementChild
         }
-        lastAuthorEl.innerXML = lastAuthor
+        if (lastAuthorEl) {
+            lastAuthorEl.innerXML = lastAuthor
+        }
         // Keywords
         if (this.metadata.keywords.length) {
             // It is not really clear how keywords should be separated in DOCX files,
             // so we use ", ".
             const keywordsString = escapeText(this.metadata.keywords.join(", "))
 
-            let keywordsEl = this.coreXML.query("cp:keywords")
+            let keywordsEl: XMLElement | null = this.coreXML.query("cp:keywords") ?? null
             if (!keywordsEl) {
                 corePropertiesEl.appendXML("<cp:keywords></cp:keywords>")
                 keywordsEl = corePropertiesEl.lastElementChild
             }
-            keywordsEl.innerXML = keywordsString
+            if (keywordsEl) {
+                keywordsEl.innerXML = keywordsString
+            }
         }
 
         // time
         const date = new Date()
         const dateString = date.toISOString().split(".")[0] + "Z"
         const createdEl = this.coreXML.query("dcterms:created")
-        createdEl.innerXML = dateString
-        let modifiedEl = this.coreXML.query("dcterms:modified")
+        if (createdEl) {
+            createdEl.innerXML = dateString
+        }
+        let modifiedEl: XMLElement | null = this.coreXML.query("dcterms:modified") ?? null
         if (!modifiedEl) {
             corePropertiesEl.appendXML(
                 '<dcterms:modified xsi:type="dcterms:W3CDTF"></dcterms:modified>'
             )
             modifiedEl = corePropertiesEl.lastElementChild
         }
-        modifiedEl.innerXML = dateString
+        if (modifiedEl) {
+            modifiedEl.innerXML = dateString
+        }
     }
 
-    async addCustomProperties() {
+    async addCustomProperties(): Promise<void> {
         // Create or update docProps/custom.xml with citation style information
         const customXmlContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
@@ -117,31 +145,35 @@ export class DOCXExporterMetadata {
 
         const customXML = await this.xml.getXml(
             "docProps/custom.xml",
-            Promise.resolve(customXmlContent)
+            customXmlContent
         )
         this.customXML = customXML
 
         // Add citation style property
         if (this.metadata.citationStyle) {
             const propertiesEl = this.customXML.query("Properties")
+            if (!propertiesEl) {
+                return Promise.resolve()
+            }
 
             // Remove any existing ZOTERO_PREF_ properties
             const existingZoteroProps = this.customXML
                 .queryAll("property")
                 .filter(
-                    prop =>
-                        prop.getAttribute("name") &&
-                        prop.getAttribute("name").startsWith("ZOTERO_PREF_")
+                    prop => {
+                        const name = String(prop.getAttribute("name"))
+                        return name && name.startsWith("ZOTERO_PREF_")
+                    }
                 )
             existingZoteroProps.forEach(prop =>
-                prop.parentElement.removeChild(prop)
+                prop.parentElement!.removeChild(prop)
             )
 
             // Find the highest pid to determine the next one
             const existingProperties = this.customXML.queryAll("property")
             let maxPid = 0
             existingProperties.forEach(prop => {
-                const pid = parseInt(prop.getAttribute("pid"))
+                const pid = parseInt(String(prop.getAttribute("pid")))
                 if (pid > maxPid) {
                     maxPid = pid
                 }
@@ -156,7 +188,7 @@ export class DOCXExporterMetadata {
 
             // Split content into chunks of 255 characters (DOCX limit)
             const chunkSize = 255
-            const chunks = []
+            const chunks: string[] = []
             for (let i = 0; i < dataContent.length; i += chunkSize) {
                 chunks.push(dataContent.substring(i, i + chunkSize))
             }
@@ -170,7 +202,7 @@ export class DOCXExporterMetadata {
                 propertiesEl.appendXML(propertyXML)
                 // Set the text content after appending (textContent escapes XML characters)
                 const lpwstrEl =
-                    propertiesEl.lastElementChild.query("vt:lpwstr")
+                    propertiesEl.lastElementChild?.query("vt:lpwstr")
                 if (lpwstrEl) {
                     lpwstrEl.textContent = chunk
                 }
@@ -183,30 +215,34 @@ export class DOCXExporterMetadata {
         return Promise.resolve()
     }
 
-    async addContributorProperties() {
+    async addContributorProperties(): Promise<void> {
         if (!this.metadata.contributors || !this.metadata.contributors.length) {
             return Promise.resolve()
         }
 
-        const propertiesEl = this.customXML.query("Properties")
+        const propertiesEl = this.customXML!.query("Properties")
+        if (!propertiesEl) {
+            return Promise.resolve()
+        }
 
         // Remove any existing fidus_contributor_ properties
-        const existingContributorProps = this.customXML
+        const existingContributorProps = this.customXML!
             .queryAll("property")
             .filter(
-                prop =>
-                    prop.getAttribute("name") &&
-                    prop.getAttribute("name").startsWith("fidus_contributor_")
+                prop => {
+                    const name = String(prop.getAttribute("name"))
+                    return name && name.startsWith("fidus_contributor_")
+                }
             )
         existingContributorProps.forEach(prop =>
-            prop.parentElement.removeChild(prop)
+            prop.parentElement!.removeChild(prop)
         )
 
         // Find the highest pid
-        const existingProperties = this.customXML.queryAll("property")
+        const existingProperties = this.customXML!.queryAll("property")
         let maxPid = 0
         existingProperties.forEach(prop => {
-            const pid = parseInt(prop.getAttribute("pid"))
+            const pid = parseInt(String(prop.getAttribute("pid")))
             if (pid > maxPid) {
                 maxPid = pid
             }
@@ -220,7 +256,7 @@ export class DOCXExporterMetadata {
 <vt:i4></vt:i4>
 </property>`
         propertiesEl.appendXML(countXML)
-        const countEl = propertiesEl.lastElementChild.query("vt:i4")
+        const countEl = propertiesEl.lastElementChild?.query("vt:i4")
         if (countEl) {
             countEl.textContent = String(contributors.length)
         }
@@ -228,7 +264,7 @@ export class DOCXExporterMetadata {
         // Add property for each contributor
         contributors.forEach((contributor, index) => {
             const num = index + 1
-            const nameParts = []
+            const nameParts: string[] = []
             if (contributor.firstname) {
                 nameParts.push(contributor.firstname)
             }
@@ -277,7 +313,7 @@ export class DOCXExporterMetadata {
 </property>`
                 propertiesEl.appendXML(propertyXML)
                 const lpwstrEl =
-                    propertiesEl.lastElementChild.query("vt:lpwstr")
+                    propertiesEl.lastElementChild?.query("vt:lpwstr")
                 if (lpwstrEl) {
                     lpwstrEl.textContent = field.value
                 }

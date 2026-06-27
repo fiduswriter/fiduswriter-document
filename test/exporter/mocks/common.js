@@ -43,6 +43,14 @@ export const convertDataURIToBlob = _dataURI => {
     return new Blob()
 }
 
+export const gettext = str => str
+
+export const interpolate = (str, args) => {
+    return str.replace(/%s/g, () => args.shift())
+}
+
+export const staticUrl = path => path
+
 export const noSpaceTmp = () => "tmp"
 
 export const longFilePath = (path, filename) => `${path}${filename}`
@@ -56,6 +64,9 @@ export default {
     postJson,
     getJson,
     convertDataURIToBlob,
+    gettext,
+    interpolate,
+    staticUrl,
     noSpaceTmp,
     longFilePath
 }
