@@ -1,3 +1,5 @@
+import type {MarkSpec, NodeSpec} from "prosemirror-model"
+
 import {parseTracks} from "./track.js"
 
 // :: NodeSpec A plain paragraph textblock. Represented in the DOM
@@ -13,7 +15,7 @@ export const paragraph = {
     parseDOM: [
         {
             tag: "p",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     track: parseTracks(dom.dataset.track)
                 }
@@ -27,7 +29,7 @@ export const paragraph = {
                 : {}
         return ["p", attrs, 0]
     }
-}
+} satisfies NodeSpec
 
 // :: NodeSpec A blockquote (`<blockquote>`) wrapping one or more blocks.
 export const blockquote = {
@@ -43,7 +45,7 @@ export const blockquote = {
     parseDOM: [
         {
             tag: "blockquote",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     track: parseTracks(dom.dataset.track)
                 }
@@ -57,7 +59,7 @@ export const blockquote = {
                 : {}
         return ["blockquote", attrs, 0]
     }
-}
+} satisfies NodeSpec
 
 // :: NodeSpec A horizontal rule (`<hr>`).
 export const horizontal_rule = {
@@ -70,7 +72,7 @@ export const horizontal_rule = {
     parseDOM: [
         {
             tag: "hr",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     track: parseTracks(dom.dataset.track)
                 }
@@ -84,14 +86,14 @@ export const horizontal_rule = {
                 : {}
         return ["hr", attrs]
     }
-}
+} satisfies NodeSpec
 
 export const underline = {
     parseDOM: [{tag: "span.underline"}],
     toDOM() {
         return ["span", {class: "underline"}, 0]
     }
-}
+} satisfies MarkSpec
 
 export const sup = {
     parseDOM: [{tag: "sup"}],
@@ -99,7 +101,7 @@ export const sup = {
         return ["sup", 0]
     },
     excludes: "sub"
-}
+} satisfies MarkSpec
 
 export const sub = {
     parseDOM: [{tag: "sub"}],
@@ -107,7 +109,7 @@ export const sub = {
         return ["sub", 0]
     },
     excludes: "sup"
-}
+} satisfies MarkSpec
 
 export const code = {
     parseDOM: [{tag: "code"}],
@@ -115,4 +117,4 @@ export const code = {
         return ["code", 0]
     },
     excludes: "strong em underline link sup sub"
-}
+} satisfies MarkSpec

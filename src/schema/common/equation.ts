@@ -1,3 +1,5 @@
+import type {NodeSpec} from "prosemirror-model"
+
 export const equation = {
     inline: true,
     group: "inline",
@@ -9,9 +11,9 @@ export const equation = {
     parseDOM: [
         {
             tag: "span.equation",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    equation: dom.dataset.equation
+                    equation: dom.dataset.equation || ""
                 }
             }
         }
@@ -23,9 +25,9 @@ export const equation = {
         import("mathlive").then(MathLive => {
             dom.innerHTML = MathLive.convertLatexToMarkup(node.attrs.equation, {
                 mathstyle: "textstyle"
-            })
+            } as unknown as Record<string, unknown>)
         })
         dom.setAttribute("contenteditable", "false")
         return dom
     }
-}
+} satisfies NodeSpec

@@ -1,12 +1,14 @@
 import {docSchema} from "./document/index.js"
 
 export class SchemaExport {
+    schema: typeof docSchema
+
     constructor() {
         this.schema = docSchema
     }
 
-    init() {
-        const spec = {
+    init(): string {
+        const spec: {nodes: Record<string, unknown>; marks: Record<string, unknown>} = {
             nodes: {},
             marks: {}
         }

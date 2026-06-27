@@ -13,129 +13,150 @@ const fastXMLParserOptions = {
     trimValues: false
 }
 
-const isLeaf = tagName => ["#text", "__cdata", "#comment"].includes(tagName)
+const isLeaf = (tagName: string | undefined): boolean =>
+    ["#text", "__cdata", "#comment"].includes(tagName || "")
 
-class XMLElement {
-    constructor(node, parentElement = null) {
+type XMLNode = Record<string, unknown>
+
+export class XMLElement {
+    node: XMLNode
+    parentElement: XMLElement | null
+
+    constructor(node: XMLNode, parentElement: XMLElement | null = null) {
         this.node = node
         this.parentElement = parentElement
 
         // Recursively wrap child elements if they exist
         const tagName = this.tagName
         if (tagName && this.node[tagName] && !isLeaf(tagName)) {
-            this.node[tagName] = this.node[tagName].map(child => {
-                // Only wrap objects (not text nodes)
-                return typeof child === "object"
-                    ? new XMLElement(child, this)
-                    : child
-            })
+            this.node[tagName] = (this.node[tagName] as unknown[]).map(
+                (child: unknown) => {
+                    // Only wrap objects (not text nodes)
+                    return typeof child === "object" && child !== null
+                        ? new XMLElement(child as XMLNode, this)
+                        : child
+                }
+            )
         }
     }
 
-    get tagName() {
+    get tagName(): string | undefined {
         // Get the tag name dynamically (the first key that isn't ":@")
         return Object.keys(this.node).find(key => key !== ":@")
     }
 
-    get children() {
+    get children(): Array<XMLElement | string> {
         // Return child elements if they exist, or an empty array if none
-        return this.node[this.tagName] || []
+        return (this.node[this.tagName!] as Array<XMLElement | string>) || []
     }
 
-    get attributes() {
+    get attributes(): Record<string, unknown> {
         // Return attributes stored under the ":@" key, or an empty object if not present
-        return this.node[":@"] || {}
+        return (this.node[":@"] as Record<string, unknown>) || {}
     }
 
-    set attributes(attrs) {
+    set attributes(attrs: Record<string, unknown>) {
         // Update the attributes object
         this.node[":@"] = attrs
     }
 
-    get innerXML() {
+    get innerXML(): string {
         // Serialize the children back to XML
         return this.children
             .map(child => {
-                return child.toString()
+                if (child instanceof XMLElement) {
+                    return child.toString()
+                }
+                return String(child)
             })
             .join("")
     }
 
-    set innerXML(xmlString) {
-        this.node[this.tagName].forEach(child => {
+    set innerXML(xmlString: string) {
+        ;(this.children as XMLElement[]).forEach(child => {
             child.setParent(null)
         })
         // Clear existing children
-        this.node[this.tagName] = []
+        this.node[this.tagName!] = []
 
         // Parse the new XML string
         const parser = new XMLParser(fastXMLParserOptions)
         const xml = parser.parse(
             `<${this.tagName}>${xmlString}</${this.tagName}>`
-        )
+        ) as XMLNode[]
         // Append new children
-        xml[0][this.tagName].forEach(child => {
-            this.appendChild(child)
+        ;((xml[0][this.tagName!] as unknown[]) || []).forEach(child => {
+            this.appendChild(child as XMLNode)
         })
     }
 
-    get textContent() {
-        if (isLeaf(this.tagName)) {
-            if (this.tagName === "#text") {
-                return this.node[this.tagName]
+    get textContent(): string {
+        const tagName = this.tagName
+        if (isLeaf(tagName)) {
+            if (tagName === "#text") {
+                return String(this.node[tagName] || "")
             }
             return ""
         } else {
             // Serialize the children back to text
-            return this.children.map(child => child.textContent).join("")
+            return (this.children as XMLElement[])
+                .map(child => child.textContent)
+                .join("")
         }
     }
 
-    set textContent(value) {
+    set textContent(value: string) {
+        const tagName = this.tagName
         // For leaf nodes, directly set the text content
-        if (this.tagName === "#text") {
+        if (tagName === "#text") {
             this.node["#text"] = value
             return
         }
 
         // For element nodes, clear children and add a text node
-        if (this.node[this.tagName]) {
+        if (this.node[tagName!]) {
             // Clear existing children
-            this.node[this.tagName] = []
+            this.node[tagName!] = []
 
             // Only add text content if it's not empty
             if (value) {
-                const textNode = {
+                const textNode: XMLNode = {
                     "#text": value
                 }
-                this.node[this.tagName].push(new XMLElement(textNode, this))
+                ;(this.node[tagName!] as XMLElement[]).push(
+                    new XMLElement(textNode, this)
+                )
             }
         }
     }
 
-    get firstChild() {
+    get firstChild(): XMLElement | string | undefined {
         return this.children[0]
     }
 
-    get lastChild() {
+    get lastChild(): XMLElement | string | undefined {
         return this.children[this.children.length - 1]
     }
 
-    get firstElementChild() {
-        return this.children.filter(child => !isLeaf(child.tagName))[0]
+    get firstElementChild(): XMLElement | undefined {
+        return (this.children as XMLElement[]).find(
+            child => child instanceof XMLElement && !isLeaf(child.tagName)
+        )
     }
 
-    get lastElementChild() {
-        const elements = this.children.filter(child => !isLeaf(child.tagName))
+    get lastElementChild(): XMLElement | null {
+        const elements = (this.children as XMLElement[]).filter(
+            child => child instanceof XMLElement && !isLeaf(child.tagName)
+        )
         if (elements.length === 0) {
             return null
         }
         return elements[elements.length - 1]
     }
 
-    get nextSibling() {
+    get nextSibling(): XMLElement | null {
         if (this.parentElement) {
-            const siblings = this.parentElement.children
+            const siblings = this.parentElement.children as XMLElement[]
             const index = siblings.indexOf(this)
             if (index < siblings.length - 1) {
                 return siblings[index + 1]
@@ -144,9 +165,9 @@ class XMLElement {
         return null
     }
 
-    get previousSibling() {
+    get previousSibling(): XMLElement | null {
         if (this.parentElement) {
-            const siblings = this.parentElement.children
+            const siblings = this.parentElement.children as XMLElement[]
             const index = siblings.indexOf(this)
             if (index > 0) {
                 return siblings[index - 1]
@@ -155,51 +176,53 @@ class XMLElement {
         return null
     }
 
-    setParent(element) {
+    setParent(element: XMLElement | null): this {
         this.parentElement = element
         return this
     }
 
-    hasAttribute(name) {
+    hasAttribute(name: string): boolean {
         return name in this.attributes
     }
 
-    getAttribute(name) {
+    getAttribute(name: string): unknown {
         return this.attributes[name]
     }
 
-    setAttribute(name, value) {
+    setAttribute(name: string, value: unknown): false | void {
         if (isLeaf(this.tagName)) {
             return false
         }
         this.attributes[name] = value
     }
 
-    cloneNode(deep = false, parentElement = null) {
+    cloneNode(deep = false, parentElement: XMLElement | null = null): XMLElement {
         if (isLeaf(this.tagName)) {
             return new XMLElement({...this.node}, parentElement)
         }
-        const clonedNode = {
-            ":@": {...this.node[":@"]}
+        const tagName = this.tagName!
+        const clonedNode: XMLNode = {
+            ":@": {...((this.node[":@"] as Record<string, unknown>) || {})}
         }
-        clonedNode[this.tagName] = []
+        clonedNode[tagName] = []
         const clone = new XMLElement(clonedNode, parentElement)
         if (deep) {
-            clonedNode[this.tagName] = this.children.map(child =>
+            clonedNode[tagName] = (this.children as XMLElement[]).map(child =>
                 child.cloneNode(deep, clone)
             )
         }
         return clone
     }
 
-    appendChild(newChild) {
-        if (isLeaf(this.tagName)) {
+    appendChild(newChild: XMLNode | XMLElement): false | void {
+        const tagName = this.tagName
+        if (isLeaf(tagName)) {
             return false
         }
-        if (!this.node[this.tagName]) {
-            this.node[this.tagName] = []
+        if (!this.node[tagName!]) {
+            this.node[tagName!] = []
         }
-        let newChildElement
+        let newChildElement: XMLElement
         // Wrap newChild in XMLElement if it's not already
         if (newChild instanceof XMLElement) {
             newChild.parentElement?.removeChild(newChild)
@@ -208,17 +231,18 @@ class XMLElement {
             newChildElement = new XMLElement(newChild, this)
         }
         // Append newChild to the list of children under the tagName
-        this.node[this.tagName].push(newChildElement)
+        ;(this.node[tagName!] as XMLElement[]).push(newChildElement)
     }
 
-    prependChild(newChild) {
-        if (isLeaf(this.tagName)) {
+    prependChild(newChild: XMLNode | XMLElement): false | void {
+        const tagName = this.tagName
+        if (isLeaf(tagName)) {
             return false
         }
-        if (!this.node[this.tagName]) {
-            this.node[this.tagName] = []
+        if (!this.node[tagName!]) {
+            this.node[tagName!] = []
         }
-        let newChildElement
+        let newChildElement: XMLElement
         // Wrap newChild in XMLElement if it's not already
         if (newChild instanceof XMLElement) {
             newChild.parentElement?.removeChild(newChild)
@@ -227,68 +251,75 @@ class XMLElement {
             newChildElement = new XMLElement(newChild, this)
         }
         // Prepend newChild to the list of children under the tagName
-        this.node[this.tagName].unshift(newChildElement)
+        ;(this.node[tagName!] as XMLElement[]).unshift(newChildElement)
     }
 
-    appendXML(xmlString) {
-        if (isLeaf(this.tagName)) {
+    appendXML(xmlString: string): false | void {
+        const tagName = this.tagName
+        if (isLeaf(tagName)) {
             return false
         }
         const parser = new XMLParser(fastXMLParserOptions)
         const xml = parser.parse(
-            `<${this.tagName}>${xmlString}</${this.tagName}>`
-        )
-        xml[0][this.tagName].forEach(child => {
-            this.appendChild(child)
+            `<${tagName}>${xmlString}</${tagName}>`
+        ) as XMLNode[]
+        ;((xml[0][tagName!] as unknown[]) || []).forEach(child => {
+            this.appendChild(child as XMLNode)
         })
     }
 
-    prependXML(xmlString) {
-        if (isLeaf(this.tagName)) {
+    prependXML(xmlString: string): false | void {
+        const tagName = this.tagName
+        if (isLeaf(tagName)) {
             return false
         }
         const parser = new XMLParser(fastXMLParserOptions)
         const xml = parser.parse(
-            `<${this.tagName}>${xmlString}</${this.tagName}>`
-        )
-        xml[0][this.tagName].reverse().forEach(child => {
-            this.prependChild(child)
-        })
+            `<${tagName}>${xmlString}</${tagName}>`
+        ) as XMLNode[]
+        ;((xml[0][tagName!] as unknown[]) || [])
+            .slice()
+            .reverse()
+            .forEach(child => {
+                this.prependChild(child as XMLNode)
+            })
     }
 
-    insertXMLAt(xmlString, index) {
-        if (isLeaf(this.tagName)) {
+    insertXMLAt(xmlString: string, index: number): false | void {
+        const tagName = this.tagName
+        if (isLeaf(tagName)) {
             return false
         }
         const parser = new XMLParser(fastXMLParserOptions)
         const xml = parser.parse(
-            `<${this.tagName}>${xmlString}</${this.tagName}>`
-        )
-        xml[0][this.tagName].forEach((child, i) => {
-            const newChild = new XMLElement(child, this)
-            this.node[this.tagName].splice(index + i, 0, newChild)
+            `<${tagName}>${xmlString}</${tagName}>`
+        ) as XMLNode[]
+        ;((xml[0][tagName!] as unknown[]) || []).forEach((child, i) => {
+            const newChild = new XMLElement(child as XMLNode, this)
+            ;(this.node[tagName!] as XMLElement[]).splice(index + i, 0, newChild)
         })
     }
 
     splitAtChildElement(
-        childElement,
+        childElement: XMLElement,
         appendToCurrentNode = "",
         insertBetweenNodes = "",
         insertAfterSplit = ""
-    ) {
-        if (!this.children.includes(childElement)) {
+    ): boolean {
+        if (!this.children.includes(childElement as unknown as never)) {
             return false
         }
 
         // Get the index of the child element
-        const splitIndex = this.children.indexOf(childElement)
+        const children = this.children as XMLElement[]
+        const splitIndex = children.indexOf(childElement)
 
         // Store the original content
-        const beforeContent = this.children.slice(0, splitIndex)
-        const afterContent = this.children.slice(splitIndex + 1)
+        const beforeContent = children.slice(0, splitIndex)
+        const afterContent = children.slice(splitIndex + 1)
 
         // Clear current node's content
-        this.node[this.tagName] = []
+        this.node[this.tagName!] = []
 
         // Add back content before split point plus any appendToCurrentNode
         beforeContent.forEach(child => this.appendChild(child))
@@ -318,11 +349,14 @@ class XMLElement {
                 // Parse insertAfterSplit to get the node type and attributes
                 if (insertAfterSplit) {
                     const parser = new XMLParser(fastXMLParserOptions)
-                    const tempXml = parser.parse(insertAfterSplit)[0]
+                    const tempXml = (parser.parse(insertAfterSplit) as XMLNode[])[0]
                     const newTagName = Object.keys(tempXml).find(
                         key => key !== ":@"
-                    )
-                    const newAttributes = tempXml[":@"] || {}
+                    )!
+                    const newAttributes = (tempXml[":@"] as Record<
+                        string,
+                        unknown
+                    >) || {}
 
                     // Create new element with the parsed tag name and attributes
                     const newElement = new XMLElement(
@@ -335,28 +369,28 @@ class XMLElement {
 
                     // Add the content from insertAfterSplit first
                     if (tempXml[newTagName]) {
-                        tempXml[newTagName].forEach(child =>
-                            newElement.appendChild(child)
+                        ;(tempXml[newTagName] as unknown[]).forEach(child =>
+                            newElement.appendChild(child as XMLNode)
                         )
                     }
 
                     // Then add the existing after content
                     afterContent.forEach(child => newElement.appendChild(child))
 
-                    parentElement.node[parentElement.tagName].splice(
+                    ;(parentElement.node[parentElement.tagName!] as XMLElement[]).splice(
                         insertIndex,
                         0,
                         newElement
                     )
                 } else {
                     // Fallback to original tag name if no insertAfterSplit provided
-                    const tagName = this.tagName
+                    const tagName = this.tagName!
                     const newElement = new XMLElement(
                         {[tagName]: []},
                         parentElement
                     )
                     afterContent.forEach(child => newElement.appendChild(child))
-                    parentElement.node[parentElement.tagName].splice(
+                    ;(parentElement.node[parentElement.tagName!] as XMLElement[]).splice(
                         insertIndex,
                         0,
                         newElement
@@ -368,27 +402,29 @@ class XMLElement {
         return true
     }
 
-    removeChild(child) {
+    removeChild(child: XMLElement): false | void {
         if (isLeaf(this.tagName)) {
             return false
         }
-        if (this.node[this.tagName]) {
-            const index = this.node[this.tagName].indexOf(child)
+        if (this.node[this.tagName!]) {
+            const index = (this.node[this.tagName!] as XMLElement[]).indexOf(child)
             if (index > -1) {
-                this.node[this.tagName].splice(index, 1)
+                ;(this.node[this.tagName!] as XMLElement[]).splice(index, 1)
                 child.setParent(null)
             }
         }
     }
 
-    insertBefore(newChild, referenceChild) {
+    insertBefore(newChild: XMLNode | XMLElement, referenceChild: XMLElement): false | void {
         if (isLeaf(this.tagName)) {
             return false
         }
-        if (this.node[this.tagName]) {
-            const index = this.node[this.tagName].indexOf(referenceChild)
+        if (this.node[this.tagName!]) {
+            const index = (this.node[this.tagName!] as XMLElement[]).indexOf(
+                referenceChild
+            )
             if (index > -1) {
-                let newChildElement
+                let newChildElement: XMLElement
                 // Wrap newChild in XMLElement if it's not already
                 if (newChild instanceof XMLElement) {
                     newChild.parentElement?.removeChild(newChild)
@@ -396,7 +432,11 @@ class XMLElement {
                 } else {
                     newChildElement = new XMLElement(newChild, this)
                 }
-                this.node[this.tagName].splice(index, 0, newChildElement)
+                ;(this.node[this.tagName!] as XMLElement[]).splice(
+                    index,
+                    0,
+                    newChildElement
+                )
             } else {
                 // If referenceChild is not found, fallback to append
                 this.appendChild(newChild)
@@ -404,20 +444,24 @@ class XMLElement {
         }
     }
 
-    query(tagName, attributes = {}) {
+    query(tagName: string | string[], attributes: Record<string, unknown> = {}): XMLElement | undefined {
         return this.queryAll(tagName, attributes, 1)[0]
     }
 
-    queryAll(tagName, attributes = {}, limit = false) {
-        const result = []
+    queryAll(
+        tagName: string | string[],
+        attributes: Record<string, unknown> = {},
+        limit: number | false = false
+    ): XMLElement[] {
+        const result: XMLElement[] = []
         const tags = typeof tagName === "string" ? [tagName] : tagName
 
-        function traverse(dom) {
+        function traverse(dom: XMLElement): boolean {
             const currentTagName = Object.keys(dom.node).find(
                 key => key !== ":@"
             )
             if (
-                tags.includes(currentTagName) &&
+                tags.includes(currentTagName || "") &&
                 Object.keys(attributes).every(attr => {
                     if (!dom.hasAttribute(attr)) {
                         return false
@@ -428,7 +472,9 @@ class XMLElement {
                     }
 
                     if (Array.isArray(attributeValue)) {
-                        return attributeValue.includes(dom.getAttribute(attr))
+                        return (attributeValue as unknown[]).includes(
+                            dom.getAttribute(attr)
+                        )
                     }
 
                     return dom.getAttribute(attr) === attributeValue
@@ -439,25 +485,27 @@ class XMLElement {
             if (limit && result.length >= limit) {
                 return true
             }
+            const childTagName = Object.keys(dom.node).find(key => key !== ":@")
             if (
-                currentTagName &&
-                dom.node[currentTagName] &&
-                !isLeaf(currentTagName)
+                childTagName &&
+                dom.node[childTagName] &&
+                !isLeaf(childTagName)
             ) {
-                for (const childDOM of dom.node[currentTagName]) {
+                for (const childDOM of dom.node[childTagName] as XMLElement[]) {
                     if (traverse(childDOM)) {
                         return true
                     }
                 }
             }
+            return false
         }
 
         traverse(this)
         return result
     }
 
-    closest(tagName) {
-        let currentNode = this
+    closest(tagName: string): XMLElement | null {
+        let currentNode: XMLElement | null = this
         while (currentNode) {
             if (currentNode.tagName === tagName) {
                 return currentNode
@@ -468,23 +516,23 @@ class XMLElement {
     }
 
     // Serialize back to original structure in a non-destructive way
-    toObject() {
+    toObject(): unknown {
         const tagName = this.tagName
         const node = {...this.node}
         if (this.node[":@"]) {
-            node[":@"] = {...this.node[":@"]}
+            node[":@"] = {...(this.node[":@"] as Record<string, unknown>)}
         }
         if (tagName && this.node[tagName]) {
             if (Array.isArray(this.node[tagName])) {
-                node[tagName] = this.node[tagName].map(child => {
+                node[tagName] = (this.node[tagName] as XMLElement[]).map(child => {
                     return child instanceof XMLElement
                         ? child.toObject()
                         : child
                 })
             } else {
                 node[tagName] =
-                    this.node[tagName] instanceof XMLElement
-                        ? this.node[tagName].toObject()
+                    (this.node[tagName] as unknown) instanceof XMLElement
+                        ? (this.node[tagName] as XMLElement).toObject()
                         : this.node[tagName]
             }
         }
@@ -496,14 +544,15 @@ class XMLElement {
         return node
     }
 
-    toString() {
-        if (isLeaf(this.tagName)) {
-            if (this.tagName === "#text") {
-                return this.node[this.tagName]
-            } else if (this.tagName === "__cdata") {
-                return `<![CDATA[${this.node[this.tagName]}]]>`
-            } else if (this.tagName === "#comment") {
-                return `<!--${this.node[this.tagName]}-->`
+    toString(): string {
+        const tagName = this.tagName
+        if (isLeaf(tagName)) {
+            if (tagName === "#text") {
+                return String(this.node[tagName] || "")
+            } else if (tagName === "__cdata") {
+                return `<![CDATA[${this.node[tagName]}]]>`
+            } else if (tagName === "#comment") {
+                return `<!--${this.node[tagName]}-->`
             }
         }
         const builder = new XMLBuilder(fastXMLParserOptions)
@@ -511,21 +560,21 @@ class XMLElement {
         return builder.build(Array.isArray(object) ? object : [object])
     }
 
-    get outerXML() {
+    get outerXML(): string {
         return this.toString()
     }
 }
 
 // Helper function to wrap the entire XML structure recursively
-export const xmlDOM = xmlString => {
+export const xmlDOM = (xmlString: string): XMLElement => {
     const parser = new XMLParser(fastXMLParserOptions)
     // Parse the XML string into an object
-    const xmlStructure = parser.parse(xmlString)
+    const xmlStructure = parser.parse(xmlString) as XMLNode[]
 
     const node =
         xmlStructure.length === 1
             ? xmlStructure[0]
-            : {"#document": xmlStructure}
+            : ({"#document": xmlStructure} as XMLNode)
     // Recursively wrap each node in XMLElement
     return new XMLElement(node)
 }

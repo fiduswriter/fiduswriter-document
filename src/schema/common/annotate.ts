@@ -1,3 +1,5 @@
+import type {MarkSpec} from "prosemirror-model"
+
 // Annotation tag is not used by the core Fidus Writer editor, but can be used by plugins that need to add annotation capability.
 export const annotation_tag = {
     attrs: {
@@ -17,9 +19,9 @@ export const annotation_tag = {
     parseDOM: [
         {
             tag: "span.annotation-tag[data-type]",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    type: dom.dataset.type,
+                    type: dom.dataset.type || "",
                     key: dom.dataset.key ? dom.dataset.key : "",
                     value: dom.dataset.value ? dom.dataset.value : ""
                 }
@@ -27,7 +29,7 @@ export const annotation_tag = {
         }
     ],
     toDOM(node) {
-        const attrs = {
+        const attrs: Record<string, unknown> = {
             class: "annotation-tag",
             "data-type": node.attrs.type
         }
@@ -39,7 +41,7 @@ export const annotation_tag = {
         }
         return ["span", attrs]
     }
-}
+} satisfies MarkSpec
 
 export const comment = {
     attrs: {
@@ -53,9 +55,9 @@ export const comment = {
     parseDOM: [
         {
             tag: "span.comment[data-id]",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    id: Number.parseInt(dom.dataset.id)
+                    id: Number.parseInt(dom.dataset.id || "0")
                 }
             }
         }
@@ -69,8 +71,8 @@ export const comment = {
             }
         ]
     }
-}
+} satisfies MarkSpec
 
-export function randomCommentId() {
+export function randomCommentId(): string {
     return String(Math.floor(Math.random() * 0xffffffff))
 }

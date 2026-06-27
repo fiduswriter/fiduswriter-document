@@ -1,3 +1,5 @@
+import type {NodeSpec} from "prosemirror-model"
+
 export const doc = {
     content: "title part*",
     selectable: false,
@@ -200,7 +202,7 @@ export const doc = {
     parseDOM: [
         {
             tag: "div.doc",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     papersize: dom.dataset.papersize,
                     citationstyle: dom.dataset.citationstyle,
@@ -221,9 +223,13 @@ export const doc = {
             0
         ]
     }
-}
+} satisfies NodeSpec
 
-const partSpec = (type, content, attrs = {}) => ({
+const partSpec = (
+    type: string,
+    content: string,
+    extraAttrs: Record<string, {default: unknown}> = {}
+): NodeSpec => ({
     content,
     group: "part",
     marks: "annotation track",
@@ -259,12 +265,12 @@ const partSpec = (type, content, attrs = {}) => ({
                 default: false
             }
         },
-        attrs
+        extraAttrs
     ),
     parseDOM: [
         {
             tag: `div.doc-${type}`,
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     hidden: dom.dataset.hidden === "true" ? true : false
                 }
@@ -272,7 +278,7 @@ const partSpec = (type, content, attrs = {}) => ({
         }
     ],
     toDOM(node) {
-        const attrs = {
+        const attrs: Record<string, unknown> = {
             class: `doc-part doc-${type} ${node.attrs.id ? `doc-${node.attrs.id}` : "doc-no-id"}`
         }
         if (node.attrs.hidden) {
@@ -400,7 +406,7 @@ export const table_of_contents = {
         dom.innerHTML = `<h1 class="toc">${node.attrs.title}</h1>`
         return dom
     }
-}
+} satisfies NodeSpec
 
 export const separator_part = {
     marks: "annotation track",
@@ -422,7 +428,7 @@ export const separator_part = {
         dom.classList.add(`doc-${node.attrs.id}`)
         return dom
     }
-}
+} satisfies NodeSpec
 
 export const title = {
     content: "text*",
@@ -449,4 +455,4 @@ export const title = {
             0
         ]
     }
-}
+} satisfies NodeSpec

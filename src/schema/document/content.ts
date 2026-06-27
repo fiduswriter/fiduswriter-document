@@ -1,8 +1,10 @@
 import {escapeText} from "fwtoolkit"
+import type {MarkSpec, NodeSpec} from "prosemirror-model"
+
 import {parseTracks} from "../common/index.js"
 import {fnNodeToHtml, htmlToFnNode} from "../footnotes_convert.js"
 
-export const randomCodeBlockId = () => {
+export const randomCodeBlockId = (): string => {
     return `C${Math.round(Math.random() * 10000000) + 1}`
 }
 
@@ -21,12 +23,12 @@ export const contributor = {
     parseDOM: [
         {
             tag: "span.contributor",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    firstname: dom.dataset.firstname,
-                    lastname: dom.dataset.lastname,
-                    email: dom.dataset.email,
-                    institution: dom.dataset.institution,
+                    firstname: dom.dataset.firstname || false,
+                    lastname: dom.dataset.lastname || false,
+                    email: dom.dataset.email || false,
+                    institution: dom.dataset.institution || false,
                     id_type: dom.dataset.id_type || false,
                     id_value: dom.dataset.id_value || false
                 }
@@ -36,17 +38,17 @@ export const contributor = {
     toDOM(node) {
         const dom = document.createElement("span")
         dom.classList.add("contributor")
-        dom.dataset.firstname = node.attrs.firstname
-        dom.dataset.lastname = node.attrs.lastname
-        dom.dataset.email = node.attrs.email
-        dom.dataset.institution = node.attrs.institution
+        dom.dataset.firstname = node.attrs.firstname || ""
+        dom.dataset.lastname = node.attrs.lastname || ""
+        dom.dataset.email = node.attrs.email || ""
+        dom.dataset.institution = node.attrs.institution || ""
         if (node.attrs.id_type) {
             dom.dataset.id_type = node.attrs.id_type
         }
         if (node.attrs.id_value) {
             dom.dataset.id_value = node.attrs.id_value
         }
-        const content = []
+        const content: string[] = []
         if (node.attrs.firstname) {
             content.push(escapeText(node.attrs.firstname))
         }
@@ -71,7 +73,7 @@ export const contributor = {
 
         return dom
     }
-}
+} satisfies NodeSpec
 
 export const tag = {
     inline: true,
@@ -84,7 +86,7 @@ export const tag = {
     parseDOM: [
         {
             tag: "span.tag",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     tag: dom.innerText
                 }
@@ -94,7 +96,7 @@ export const tag = {
     toDOM(node) {
         return ["span", {class: "tag"}, node.attrs.tag]
     }
-}
+} satisfies NodeSpec
 
 export const footnote = {
     inline: true,
@@ -111,9 +113,9 @@ export const footnote = {
     parseDOM: [
         {
             tag: "span.footnote-marker[data-footnote]",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    footnote: htmlToFnNode(dom.dataset.footnote)
+                    footnote: htmlToFnNode(dom.dataset.footnote || "")
                 }
             }
         }
@@ -125,7 +127,7 @@ export const footnote = {
         dom.innerHTML = "&nbsp;"
         return dom
     }
-}
+} satisfies NodeSpec
 
 export const code_block = {
     content: "text*",
@@ -154,7 +156,7 @@ export const code_block = {
         {
             tag: "pre",
             preserveWhitespace: "full",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     track: parseTracks(dom.dataset.track),
                     language: dom.dataset.language || "",
@@ -166,7 +168,7 @@ export const code_block = {
         }
     ],
     toDOM(node) {
-        const attrs = {}
+        const attrs: Record<string, unknown> = {}
         if (node.attrs.track.length) {
             attrs["data-track"] = JSON.stringify(node.attrs.track)
         }
@@ -184,4 +186,4 @@ export const code_block = {
         }
         return ["pre", attrs, ["code", 0]]
     }
-}
+} satisfies NodeSpec

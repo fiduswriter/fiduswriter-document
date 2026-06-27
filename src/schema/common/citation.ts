@@ -1,8 +1,16 @@
-function parseReferences(str) {
+import type {NodeSpec} from "prosemirror-model"
+
+export interface CitationReference {
+    id: number
+    locator?: string
+    prefix?: string
+}
+
+function parseReferences(str: string | undefined): CitationReference[] {
     if (!str) {
         return []
     }
-    let references
+    let references: unknown
     try {
         references = JSON.parse(str)
     } catch (_error) {
@@ -13,15 +21,16 @@ function parseReferences(str) {
     }
     return references
         .filter(
-            ref => ref.hasOwnProperty("id") // ensure there is an id.
+            (ref): ref is Record<string, unknown> =>
+                typeof ref === "object" && ref !== null && Object.prototype.hasOwnProperty.call(ref, "id")
         )
         .map(ref => {
-            const mRef = {id: ref.id}
+            const mRef: CitationReference = {id: Number(ref.id)}
             if (ref.locator) {
-                mRef.locator = ref.locator
+                mRef.locator = String(ref.locator)
             }
             if (ref.prefix) {
-                mRef.prefix = ref.prefix
+                mRef.prefix = String(ref.prefix)
             }
             return mRef
         })
@@ -41,7 +50,7 @@ export const citation = {
     parseDOM: [
         {
             tag: "span.citation",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     format: dom.dataset.format || "",
                     references: parseReferences(dom.dataset.references)
@@ -59,4 +68,4 @@ export const citation = {
             }
         ]
     }
-}
+} satisfies NodeSpec

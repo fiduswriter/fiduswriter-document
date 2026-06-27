@@ -1,11 +1,19 @@
-import {xmlDOM} from "./xml.js"
-
 import {get} from "fwtoolkit"
+
+import {xmlDOM, XMLElement} from "./xml.js"
+
 // Handle a zip file containing XML files. Make sure files are only opened once,
 // and provide a mechanism to save the file.
 
 export class XmlZip {
-    constructor(url, mimeType) {
+    url: string
+    mimeType: string
+    docs: Record<string, XMLElement>
+    extraFiles: Record<string, unknown>
+    rawFile: Blob | false
+    zip: any
+
+    constructor(url: string, mimeType: string) {
         this.url = url
         this.mimeType = mimeType
         this.docs = {}
@@ -33,7 +41,7 @@ export class XmlZip {
     }
 
     // Open file at filePath from zip file and parse it as XML.
-    getXml(filePath, defaultContents) {
+    getXml(filePath: string, defaultContents?: string): Promise<XMLElement> {
         if (this.docs[filePath]) {
             // file has been loaded already.
             return Promise.resolve(this.docs[filePath])
@@ -41,7 +49,7 @@ export class XmlZip {
             return this.zip
                 .file(filePath)
                 .async("string")
-                .then(string => {
+                .then((string: string) => {
                     this.docs[filePath] = xmlDOM(string)
                     return Promise.resolve(this.docs[filePath])
                 })
@@ -57,36 +65,36 @@ export class XmlZip {
     }
 
     // Add an xml file at filepath without checking for previous version
-    addXmlFile(filePath, xmlContents) {
+    addXmlFile(filePath: string, xmlContents: XMLElement): void {
         this.docs[filePath] = xmlContents
     }
 
     // Add extra file to be saved in zip later.
-    addExtraFile(filePath, fileContents) {
+    addExtraFile(filePath: string, fileContents: unknown): void {
         this.extraFiles[filePath] = fileContents
     }
 
     // Put all currently open XML files into zip.
-    allXMLToZip() {
+    allXMLToZip(): void {
         for (const fileName in this.docs) {
             this.xmlToZip(fileName)
         }
     }
 
     // Put all extra files into zip.
-    allExtraToZip() {
+    allExtraToZip(): void {
         for (const fileName in this.extraFiles) {
             this.zip.file(fileName, this.extraFiles[fileName])
         }
     }
 
     // Put the xml identified by filePath into zip.
-    xmlToZip(filePath) {
+    xmlToZip(filePath: string): void {
         const string = this.docs[filePath].toString()
         this.zip.file(filePath, string)
     }
 
-    prepareBlob() {
+    prepareBlob(): Promise<Blob> {
         this.allXMLToZip()
         this.allExtraToZip()
 

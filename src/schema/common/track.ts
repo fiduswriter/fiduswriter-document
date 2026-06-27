@@ -1,8 +1,19 @@
-export function parseTracks(str) {
+import type {MarkSpec, NodeSpec} from "prosemirror-model"
+
+export interface Track {
+    type: "insertion" | "deletion" | "block_change"
+    user: number
+    username: string
+    date: number
+    approved?: boolean
+    before?: unknown
+}
+
+export function parseTracks(str: string | undefined): Track[] {
     if (!str) {
         return []
     }
-    let tracks
+    let tracks: unknown
     try {
         tracks = JSON.parse(str)
     } catch (_error) {
@@ -12,16 +23,16 @@ export function parseTracks(str) {
         return []
     }
     return tracks.filter(
-        (
-            track // ensure required fields are present
-        ) =>
-            track.hasOwnProperty("user") &&
-            track.hasOwnProperty("username") &&
-            track.hasOwnProperty("date")
+        (track): track is Track =>
+            typeof track === "object" &&
+            track !== null &&
+            Object.prototype.hasOwnProperty.call(track, "user") &&
+            Object.prototype.hasOwnProperty.call(track, "username") &&
+            Object.prototype.hasOwnProperty.call(track, "date")
     )
 }
 
-export function addTracks(node, attrs) {
+export function addTracks(node: {attrs: {track?: Track[]}}, attrs: Record<string, unknown>): void {
     if (node.attrs.track?.length) {
         attrs["data-track"] = JSON.stringify(node.attrs.track)
     }
@@ -44,11 +55,11 @@ export const deletion = {
     parseDOM: [
         {
             tag: "span.deletion",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    user: Number.parseInt(dom.dataset.user),
-                    username: dom.dataset.username,
-                    date: Number.parseInt(dom.dataset.date)
+                    user: Number.parseInt(dom.dataset.user || "0"),
+                    username: dom.dataset.username || "",
+                    date: Number.parseInt(dom.dataset.date || "0")
                 }
             }
         }
@@ -64,13 +75,13 @@ export const deletion = {
             }
         ]
     }
-}
+} satisfies MarkSpec
 
-function parseFormatList(str) {
+function parseFormatList(str: string | undefined): string[] {
     if (!str) {
         return []
     }
-    let formatList
+    let formatList: unknown
     try {
         formatList = JSON.parse(str)
     } catch (_error) {
@@ -79,7 +90,7 @@ function parseFormatList(str) {
     if (!Array.isArray(formatList)) {
         return []
     }
-    return formatList.filter(format => typeof format === "string") // ensure there are only strings in list
+    return formatList.filter((format): format is string => typeof format === "string")
 }
 
 export const format_change = {
@@ -105,11 +116,11 @@ export const format_change = {
     parseDOM: [
         {
             tag: "span.format-change",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    user: Number.parseInt(dom.dataset.user),
-                    username: dom.dataset.username,
-                    date: Number.parseInt(dom.dataset.date),
+                    user: Number.parseInt(dom.dataset.user || "0"),
+                    username: dom.dataset.username || "",
+                    date: Number.parseInt(dom.dataset.date || "0"),
                     before: parseFormatList(dom.dataset.before),
                     after: parseFormatList(dom.dataset.after)
                 }
@@ -129,7 +140,7 @@ export const format_change = {
             }
         ]
     }
-}
+} satisfies MarkSpec
 
 export const insertion = {
     attrs: {
@@ -151,11 +162,11 @@ export const insertion = {
     parseDOM: [
         {
             tag: "span.insertion",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    user: Number.parseInt(dom.dataset.user),
-                    username: dom.dataset.username,
-                    date: Number.parseInt(dom.dataset.date),
+                    user: Number.parseInt(dom.dataset.user || "0"),
+                    username: dom.dataset.username || "",
+                    date: Number.parseInt(dom.dataset.date || "0"),
                     inline: true,
                     approved: false
                 }
@@ -163,11 +174,11 @@ export const insertion = {
         },
         {
             tag: "span.approved-insertion",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    user: Number.parseInt(dom.dataset.user),
-                    username: dom.dataset.username,
-                    date: Number.parseInt(dom.dataset.date),
+                    user: Number.parseInt(dom.dataset.user || "0"),
+                    username: dom.dataset.username || "",
+                    date: Number.parseInt(dom.dataset.date || "0"),
                     inline: true,
                     approved: true
                 }
@@ -187,4 +198,4 @@ export const insertion = {
             }
         ]
     }
-}
+} satisfies MarkSpec

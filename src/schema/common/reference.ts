@@ -1,3 +1,5 @@
+import type {MarkSpec, NodeSpec} from "prosemirror-model"
+
 export const cross_reference = {
     inline: true,
     group: "inline",
@@ -12,10 +14,10 @@ export const cross_reference = {
     parseDOM: [
         {
             tag: "span.cross-reference[data-id][data-title]",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    id: dom.dataset.id,
-                    title: dom.dataset.title
+                    id: dom.dataset.id || false,
+                    title: dom.dataset.title ?? null
                 }
             }
         }
@@ -31,7 +33,7 @@ export const cross_reference = {
             node.attrs.title ? node.attrs.title : gettext("Missing Target")
         ]
     }
-}
+} satisfies NodeSpec
 
 export const link = {
     attrs: {
@@ -44,10 +46,10 @@ export const link = {
     parseDOM: [
         {
             tag: "a[href]",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    href: dom.getAttribute("href"),
-                    title: dom.getAttribute("title")
+                    href: dom.getAttribute("href") || "",
+                    title: dom.getAttribute("title") || ""
                 }
             }
         }
@@ -64,9 +66,9 @@ export const link = {
                   }
         return ["a", attrs, 0]
     }
-}
+} satisfies MarkSpec
 
-export const randomAnchorId = () => {
+export const randomAnchorId = (): string => {
     return `A${Math.round(Math.random() * 10000000) + 1}`
 }
 
@@ -81,9 +83,9 @@ export const anchor = {
     parseDOM: [
         {
             tag: "span.anchor[data-id]",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    id: dom.dataset.id
+                    id: dom.dataset.id || false
                 }
             }
         }
@@ -97,4 +99,4 @@ export const anchor = {
             }
         ]
     }
-}
+} satisfies MarkSpec

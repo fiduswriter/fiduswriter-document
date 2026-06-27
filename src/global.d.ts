@@ -9,3 +9,5 @@ declare function interpolate(
     args: Array<string | number>,
     named?: boolean
 ): string
+
+declare function staticUrl(path: string): string

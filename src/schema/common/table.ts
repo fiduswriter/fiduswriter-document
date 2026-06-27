@@ -1,3 +1,4 @@
+import type {NodeSpec} from "prosemirror-model"
 import {tableNodes} from "prosemirror-tables"
 
 import {parseTracks} from "./track.js"
@@ -19,12 +20,12 @@ export const table = {
     parseDOM: [
         {
             tag: "table",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 const track = parseTracks(dom.dataset.track),
-                    width = dom.dataset.width,
-                    aligned = width === "100" ? "center" : dom.dataset.aligned,
-                    layout = dom.dataset.layout,
-                    id = dom.id || dom.dataset.id
+                    width = dom.dataset.width || "100",
+                    aligned = width === "100" ? "center" : dom.dataset.aligned || "center",
+                    layout = dom.dataset.layout || "fixed",
+                    id = dom.id || dom.dataset.id || false
                 return {
                     track,
                     width,
@@ -38,7 +39,7 @@ export const table = {
         }
     ],
     toDOM(node) {
-        const attrs = {
+        const attrs: Record<string, unknown> = {
             id: node.attrs.id,
             class: `table-${node.attrs.width} table-${node.attrs.aligned} table-${node.attrs.layout}`,
             "data-width": node.attrs.width,
@@ -54,7 +55,7 @@ export const table = {
         }
         return ["table", attrs, 0]
     }
-}
+} satisfies NodeSpec
 
 export const table_caption = {
     content: "inline*",
@@ -66,10 +67,11 @@ export const table_caption = {
             ["span", {class: "text"}, 0]
         ]
     }
-}
+} satisfies NodeSpec
 
 const origTableNodes = tableNodes({
-    cellContent: "block+"
+    cellContent: "block+",
+    cellAttributes: {}
 })
 
 export const table_body = Object.assign({}, origTableNodes["table"], {
@@ -77,7 +79,7 @@ export const table_body = Object.assign({}, origTableNodes["table"], {
     toDOM() {
         return ["tbody", 0]
     }
-})
+}) satisfies NodeSpec
 
 export const table_row = {
     content: "(table_cell | table_header)+",
@@ -86,18 +88,18 @@ export const table_row = {
     toDOM() {
         return ["tr", 0]
     }
-}
+} satisfies NodeSpec
 
 export const table_header = Object.assign(
     {marks: "annotation"},
     origTableNodes["table_header"]
-)
+) satisfies NodeSpec
 
 export const table_cell = Object.assign(
     {marks: "annotation"},
     origTableNodes["table_cell"]
-)
+) satisfies NodeSpec
 
-export function randomTableId() {
+export function randomTableId(): string {
     return "T" + Math.round(Math.random() * 10000000) + 1
 }

@@ -1,18 +1,42 @@
-import {convertDataURIToBlob, get} from "fwtoolkit"
+import {convertDataURIToBlob as convertDataURIToBlobFn, get} from "fwtoolkit"
+
+export interface ZipTextFile {
+    filename: string
+    contents: string
+}
+
+export interface ZipBinaryFile {
+    url: string
+    filename: string
+    blob?: Blob
+}
+
+export interface ZipIncludeFile {
+    url: string
+    directory: string
+    blob?: Blob
+}
 
 /** Creates a zip file.
  * @function zipFileCreator
- * @param {list} textFiles A list of files in plain text format.
- * @param {list} binaryFiles A list fo files that have to be downloaded from the internet before being included.
- * @param {list} includeZips A list of zip files to be merged into the output zip file.
- * @param {string} [mimeType=application/zip] The mimetype of the file that is to be created.
+ * @param textFiles A list of files in plain text format.
+ * @param binaryFiles A list fo files that have to be downloaded from the internet before being included.
+ * @param includeZips A list of zip files to be merged into the output zip file.
+ * @param mimeType The mimetype of the file that is to be created.
  */
 
 export class ZipFileCreator {
+    textFiles: ZipTextFile[]
+    binaryFiles: ZipBinaryFile[]
+    zipFiles: ZipIncludeFile[]
+    mimeType: string
+    date: Date
+    zipFs: any
+
     constructor(
-        textFiles = [],
-        binaryFiles = [],
-        zipFiles = [],
+        textFiles: ZipTextFile[] = [],
+        binaryFiles: ZipBinaryFile[] = [],
+        zipFiles: ZipIncludeFile[] = [],
         mimeType = "application/zip",
         date = new Date()
     ) {
@@ -25,7 +49,7 @@ export class ZipFileCreator {
 
     init() {
         return import("jszip").then(({default: JSZip}) => {
-            JSZip.defaults.date = this.date
+            ;(JSZip as any).defaults.date = this.date
             this.zipFs = new JSZip()
             if (this.mimeType !== "application/zip") {
                 this.zipFs.file("mimetype", this.mimeType, {
@@ -84,7 +108,7 @@ export class ZipFileCreator {
     }
 
     // Legacy - remove in 3.12. Can be sued directly from function in common/blob.js
-    convertDataURIToBlob(dataURI) {
-        return convertDataURIToBlob(dataURI)
+    convertDataURIToBlob(dataURI: string): Blob {
+        return convertDataURIToBlobFn(dataURI)
     }
 }

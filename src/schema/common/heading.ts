@@ -1,10 +1,12 @@
+import type {NodeSpec} from "prosemirror-model"
+
 import {addTracks, parseTracks} from "./track.js"
 
-export const randomHeadingId = () => {
+export const randomHeadingId = (): string => {
     return `H${Math.round(Math.random() * 10000000) + 1}`
 }
 
-const createHeading = level => ({
+const createHeading = (level: number): NodeSpec => ({
     group: "block heading",
     content: "inline*",
     marks: "_",
@@ -20,16 +22,16 @@ const createHeading = level => ({
     parseDOM: [
         {
             tag: `h${level}`,
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    id: dom.id,
+                    id: dom.id || false,
                     track: parseTracks(dom.dataset.track)
                 }
             }
         }
     ],
     toDOM(node) {
-        const attrs = {id: node.attrs.id}
+        const attrs: Record<string, unknown> = {id: node.attrs.id}
         addTracks(node, attrs)
         return [`h${level}`, attrs, 0]
     }

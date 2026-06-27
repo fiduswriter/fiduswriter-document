@@ -6,11 +6,35 @@
 
 import {CSLExporter} from "biblatex-csl-converter"
 
+interface BibDB {
+    db: Record<string, BibEntry>
+}
+
+interface BibEntry {
+    entry_key?: string
+    [key: string]: unknown
+}
+
+interface CitationReference {
+    id: number
+    locator?: string
+    prefix?: string
+    item?: Record<string, unknown>
+}
+
+interface ZoteroCitationItem {
+    id: number
+    uris: string[]
+    itemData: Record<string, unknown>
+    locator?: string
+    prefix?: string
+}
+
 /**
  * Generate a random citation ID similar to Zotero's format.
  * Zotero uses 8-10 character alphanumeric IDs.
  */
-function generateCitationId() {
+function generateCitationId(): string {
     const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
     let id = ""
     for (let i = 0; i < 8; i++) {
@@ -21,29 +45,29 @@ function generateCitationId() {
 
 /**
  * Convert bibliography entries to CSL-JSON format.
- * @param {Object} bibDB - The bibliography database
- * @param {Array} ids - Array of entry IDs to convert
- * @returns {Object} Object mapping IDs to CSL-JSON entries
+ * @param bibDB - The bibliography database
+ * @param ids - Array of entry IDs to convert
+ * @returns Object mapping IDs to CSL-JSON entries
  */
-function convertToCSL(bibDB, ids) {
-    const exporter = new CSLExporter(bibDB.db, ids)
+function convertToCSL(bibDB: BibDB, ids: number[]): Record<string, unknown> {
+    const exporter = new CSLExporter(bibDB.db as Record<string, any>, ids as unknown as string[])
     return exporter.parse()
 }
 
 /**
  * Create a Zotero citation JSON object.
- * @param {Array} references - Array of {id, prefix?, locator?} from citation node
- * @param {Object} bibDB - Bibliography database
- * @param {string} formattedCitation - Pre-formatted citation text from citeproc
- * @param {string} citationId - Optional citation ID (generated if not provided)
- * @returns {Object} Zotero citation JSON object
+ * @param references - Array of {id, prefix?, locator?} from citation node
+ * @param bibDB - Bibliography database
+ * @param formattedCitation - Pre-formatted citation text from citeproc
+ * @param citationId - Optional citation ID (generated if not provided)
+ * @returns Zotero citation JSON object
  */
 export function createZoteroCitation(
-    references,
-    bibDB,
-    formattedCitation,
-    citationId = null
-) {
+    references: CitationReference[],
+    bibDB: BibDB,
+    formattedCitation: string,
+    citationId: string | null = null
+): Record<string, unknown> {
     const citationID = citationId || generateCitationId()
 
     // Get the IDs of all referenced items
@@ -59,7 +83,7 @@ export function createZoteroCitation(
                 return null
             }
             const citationKey = entry.entry_key || String(ref.id)
-            const item = {
+            const item: ZoteroCitationItem = {
                 id: ref.id,
                 uris: [],
                 itemData: {
@@ -78,7 +102,7 @@ export function createZoteroCitation(
 
             return item
         })
-        .filter(item => item !== null)
+        .filter((item): item is ZoteroCitationItem => item !== null)
 
     return {
         citationID,

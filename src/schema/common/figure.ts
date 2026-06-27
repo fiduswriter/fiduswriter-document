@@ -1,10 +1,30 @@
+import type {NodeSpec} from "prosemirror-model"
+
 import {parseTracks} from "./track.js"
 
-export function randomFigureId() {
+export function randomFigureId(): string {
     return "F" + Math.round(Math.random() * 10000000) + 1
 }
 
 let imageDBBroken = false
+
+interface ImageDBEntry {
+    file_type?: string
+    image?: string
+    original_file_type?: string
+}
+
+interface ImageDB {
+    db: Record<number, ImageDBEntry>
+    mod?: {
+        editor?: {
+            e2ee?: {
+                key?: CryptoKey
+            }
+        }
+    }
+    getDB?: () => Promise<unknown>
+}
 
 export const figure = {
     inline: false,
@@ -24,11 +44,11 @@ export const figure = {
     parseDOM: [
         {
             tag: "figure",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     category: dom.dataset.category,
                     caption: !!dom.dataset.captionHidden,
-                    id: dom.id,
+                    id: dom.id || false,
                     track: parseTracks(dom.dataset.track),
                     aligned: dom.dataset.aligned,
                     width: dom.dataset.width,
@@ -38,7 +58,7 @@ export const figure = {
         }
     ],
     toDOM(node) {
-        const attrs = {
+        const attrs: Record<string, unknown> = {
             id: node.attrs.id,
             class: `aligned-${node.attrs.aligned} image-width-${node.attrs.width}`,
             "data-aligned": node.attrs.aligned,
@@ -53,6 +73,10 @@ export const figure = {
         }
         return ["figure", attrs, 0]
     }
+} satisfies NodeSpec
+
+function errorImageUrl(): string {
+    return typeof staticUrl !== "undefined" ? staticUrl("img/error.avif") : "/static/img/error.avif"
 }
 
 export const image = {
@@ -64,8 +88,8 @@ export const image = {
     parseDOM: [
         {
             tag: "img",
-            getAttrs(dom) {
-                const image = Number.parseInt(dom.dataset.image)
+            getAttrs(dom: HTMLElement) {
+                const image = Number.parseInt(dom.dataset.image || "")
                 return {
                     image: isNaN(image) ? false : image
                 }
@@ -75,8 +99,8 @@ export const image = {
     toDOM(node) {
         const dom = document.createElement("img")
         if (node.attrs.image !== false) {
-            dom.dataset.image = node.attrs.image
-            const imageDB = node.type.schema.cached.imageDB
+            dom.dataset.image = String(node.attrs.image)
+            const imageDB = (node.type.schema.cached as {imageDB?: ImageDB}).imageDB
             if (imageDB) {
                 const imageEntry = imageDB.db[node.attrs.image]
                 if (imageEntry?.image) {
@@ -89,25 +113,21 @@ export const image = {
                             import("../../editor/e2ee/encryptor.js").then(
                                 ({E2EEEncryptor}) => {
                                     E2EEEncryptor.decryptImageToUrl(
-                                        imageEntry.image,
+                                        imageEntry.image as string,
                                         key,
-                                        imageEntry.original_file_type ||
-                                            "image/png"
+                                        imageEntry.original_file_type || "image/png"
                                     )
                                         .then(url => {
                                             dom.setAttribute("src", url)
                                             dom.dataset.imageSrc = url
                                         })
                                         .catch(() => {
-                                            dom.setAttribute(
-                                                "src",
-                                                (typeof staticUrl !== "undefined" ? staticUrl("img/error.avif") : "/static/img/error.avif")
-                                            )
+                                            dom.setAttribute("src", errorImageUrl())
                                         })
                                 }
                             )
                         } else {
-                            dom.setAttribute("src", (typeof staticUrl !== "undefined" ? staticUrl("img/error.avif") : "/static/img/error.avif"))
+                            dom.setAttribute("src", errorImageUrl())
                         }
                     } else {
                         const imgSrc = imageEntry.image
@@ -120,9 +140,9 @@ export const image = {
                     imageDB, do not attempt at reloading the imageDB if an image cannot be
                     found. */
                     if (imageDBBroken) {
-                        dom.setAttribute("src", (typeof staticUrl !== "undefined" ? staticUrl("img/error.avif") : "/static/img/error.avif"))
+                        dom.setAttribute("src", errorImageUrl())
                     } else {
-                        imageDB.getDB().then(() => {
+                        imageDB.getDB?.().then(() => {
                             const refreshedEntry = imageDB.db[node.attrs.image]
                             if (refreshedEntry?.image) {
                                 dom.setAttribute("src", refreshedEntry.image)
@@ -137,7 +157,7 @@ export const image = {
         }
         return dom
     }
-}
+} satisfies NodeSpec
 
 export const figure_equation = {
     selectable: false,
@@ -150,7 +170,7 @@ export const figure_equation = {
     parseDOM: [
         {
             tag: "div.figure-equation[data-equation]",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     equation: dom.dataset.equation
                 }
@@ -167,13 +187,13 @@ export const figure_equation = {
                     node.attrs.equation,
                     {
                         mathstyle: "displaystyle"
-                    }
+                    } as unknown as Record<string, unknown>
                 )
             })
         }
         return dom
     }
-}
+} satisfies NodeSpec
 
 export const figure_caption = {
     isolating: true,
@@ -187,4 +207,4 @@ export const figure_caption = {
             ["span", {class: "text"}, 0]
         ]
     }
-}
+} satisfies NodeSpec

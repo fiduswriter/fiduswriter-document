@@ -1,3 +1,5 @@
+import type {NodeSpec} from "prosemirror-model"
+
 import {addTracks, parseTracks} from "./track.js"
 
 // :: NodeSpec
@@ -16,11 +18,11 @@ export const ordered_list = {
     parseDOM: [
         {
             tag: "ol",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    id: dom.id,
+                    id: dom.id || false,
                     order: dom.hasAttribute("start")
-                        ? +dom.getAttribute("start")
+                        ? Number.parseInt(dom.getAttribute("start") || "1")
                         : 1,
                     track: parseTracks(dom.dataset.track)
                 }
@@ -28,16 +30,16 @@ export const ordered_list = {
         }
     ],
     toDOM(node) {
-        const attrs = {id: node.attrs.id}
+        const attrs: Record<string, unknown> = {id: node.attrs.id}
         if (node.attrs.order !== 1) {
             attrs.start = node.attrs.order
         }
         addTracks(node, attrs)
         return ["ol", attrs, 0]
     }
-}
+} satisfies NodeSpec
 
-export function randomListId() {
+export function randomListId(): string {
     return "L" + Math.round(Math.random() * 10000000) + 1
 }
 
@@ -53,20 +55,20 @@ export const bullet_list = {
     parseDOM: [
         {
             tag: "ul",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
-                    id: dom.id,
+                    id: dom.id || false,
                     track: parseTracks(dom.dataset.track)
                 }
             }
         }
     ],
     toDOM(node) {
-        const attrs = {id: node.attrs.id}
+        const attrs: Record<string, unknown> = {id: node.attrs.id}
         addTracks(node, attrs)
         return ["ul", attrs, 0]
     }
-}
+} satisfies NodeSpec
 
 // :: NodeSpec
 // A list item (`<li>`) spec.
@@ -79,7 +81,7 @@ export const list_item = {
     parseDOM: [
         {
             tag: "li",
-            getAttrs(dom) {
+            getAttrs(dom: HTMLElement) {
                 return {
                     track: parseTracks(dom.dataset.track)
                 }
@@ -87,9 +89,9 @@ export const list_item = {
         }
     ],
     toDOM(node) {
-        const attrs = {}
+        const attrs: Record<string, unknown> = {}
         addTracks(node, attrs)
         return ["li", attrs, 0]
     },
     defining: true
-}
+} satisfies NodeSpec
