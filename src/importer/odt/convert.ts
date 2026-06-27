@@ -1,6 +1,7 @@
 import {MathMLToLaTeX} from "mathml-to-latex"
 
 import {xmlDOM} from "../../exporter/tools/xml.js"
+import type {XMLElement} from "../../exporter/tools/xml.js"
 import {
     randomCommentId,
     randomFigureId,
@@ -16,17 +17,42 @@ import {
     parseOdtBibliographyMark,
     parseOdtReferenceMark
 } from "./citations.js"
+import {gettext} from "fwtoolkit"
+import type {BibDB, FidusDoc, FidusNode, ImageDBEntry} from "../../types.js"
+
+function attr(node: unknown, name: string): string {
+    if (node && typeof node === "object" && "getAttribute" in node) {
+        return String((node as XMLElement).getAttribute(name) || "")
+    }
+    return ""
+}
 
 export class OdtConvert {
+    importId: string
+    template: {content: FidusDoc}
+    bibliography: Record<string, any>
+    bibDB: BibDB
+    images: Record<number, ImageDBEntry>
+    styles: Record<string, any>
+    contentDoc: XMLElement | null
+    stylesDoc: XMLElement | null
+    metaDoc: XMLElement | null
+    manifestDoc: XMLElement | null
+    tracks: Record<string, any>
+    comments: Record<string, any>
+    currentCommentIds: string[]
+    currentTracks: any[]
+    referenceableObjects: Record<string, any>
+
     constructor(
-        contentXml,
-        stylesXml,
-        metaXml,
-        manifestXml,
-        importId,
-        template,
-        bibliography,
-        bibDb
+        contentXml: string,
+        stylesXml: string,
+        metaXml: string,
+        manifestXml: string,
+        importId: string,
+        template: {content: FidusDoc},
+        bibliography: Record<string, any>,
+        bibDb: BibDB
     ) {
         this.importId = importId
         this.template = template
@@ -47,7 +73,11 @@ export class OdtConvert {
         this.referenceableObjects = {} // All objects that can be referenced
     }
 
-    init() {
+    init(): {
+        content: FidusDoc
+        settings: Record<string, any>
+        comments: Record<string, any>
+    } {
         this.parseTrackedChanges()
         this.parseStyles()
         this.parseComments()
@@ -66,7 +96,10 @@ export class OdtConvert {
     }
 
     parseTrackedChanges() {
-        const trackedChangesEl = this.contentDoc.query("text:tracked-changes")
+        if (!this.contentDoc) {
+            return
+        }
+        const trackedChangesEl = this.contentDoc!.query("text:tracked-changes")
         if (!trackedChangesEl) {
             return
         }
@@ -80,11 +113,11 @@ export class OdtConvert {
         // This method takes all the deleted content and puts it back into the place where
         // it was previously. That way the structure is more similar to the output FW document
         // and is more easily converted.
-        const deletions = {}
+        const deletions: Record<string, any> = {}
 
         const changedRegions = trackedChangesEl.queryAll("text:changed-region")
-        changedRegions.forEach(region => {
-            const id = region.getAttribute("text:id")
+        changedRegions.forEach((region: any) => {
+            const id = attr(region, "text:id")
 
             const insertion = region.query("text:insertion")
             const deletion = region.query("text:deletion")
@@ -94,11 +127,11 @@ export class OdtConvert {
             }
             const changeInfo = region.query("office:change-info")
             if (changeInfo) {
-                const track = {
+                const track: Record<string, any> = {
                     type: insertion ? "insertion" : "deletion",
                     user: 1,
                     username: changeInfo.query("dc:creator")?.textContent || "",
-                    date: parseInt(
+                    date: Math.floor(
                         new Date(
                             changeInfo.query("dc:date")?.textContent || ""
                         ).getTime() / 60000
@@ -112,55 +145,55 @@ export class OdtConvert {
                 if (deletion) {
                     // Store deletion content for later use
                     deletions[id] = deletion.children.filter(
-                        child => child.tagName !== "office:change-info"
+                        (child: any) => child.tagName !== "office:change-info"
                     )
                 }
             }
         })
 
         // Then find and replace all deletion change markers
-        const changeMarkers = this.contentDoc.queryAll("text:change")
-        changeMarkers.forEach(marker => {
-            const changeId = marker.getAttribute("text:change-id")
+        const changeMarkers = this.contentDoc!.queryAll("text:change")
+        changeMarkers.forEach((marker: any) => {
+            const changeId = attr(marker, "text:change-id")
             const deletion = deletions[changeId]
             if (deletion) {
                 if (deletion.length > 0) {
                     // Create change-start and change-end elements
                     const markerIndex =
-                        marker.parentElement.children.indexOf(marker)
+                        marker.parentElement!.children.indexOf(marker)
 
-                    marker.parentElement.insertXMLAt(
+                    marker.parentElement!.insertXMLAt(
                         `<text:change-start text:change-id="${changeId}"/>`,
                         markerIndex
                     )
-                    marker.parentElement.insertXMLAt(
+                    marker.parentElement!.insertXMLAt(
                         `<text:change-end text:change-id="${changeId}"/>`,
                         markerIndex + 2
                     )
 
                     if (deletion.length === 1) {
                         // Single block - just insert the content
-                        deletion[0].children.forEach(content => {
-                            marker.parentElement.insertBefore(content, marker)
+                        deletion[0].children.forEach((content: any) => {
+                            marker.parentElement!.insertBefore(content, marker)
                         })
                     } else {
                         // Multiple blocks - need to split the paragraph/headline
-                        const parentElement = marker.parentElement
+                        const parentElement = marker.parentElement!
                         parentElement.splitAtChildElement(
                             marker,
                             deletion[0].children
-                                ?.map(node => node.toString())
+                                ?.map((node: any) => node.toString())
                                 .join("") || "", // First block content to be added to current node
                             deletion
                                 .slice(1, -1)
-                                .map(node => node.toString())
+                                .map((node: any) => node.toString())
                                 .join(""), // Middle blocks
                             deletion[deletion.length - 1].toString() // Last block
                         )
                     }
                 }
                 // Remove the original change marker
-                marker.parentElement.removeChild(marker)
+                marker.parentElement!.removeChild(marker)
             }
         })
     }
@@ -170,42 +203,40 @@ export class OdtConvert {
             return
         }
         const styleNodes = this.stylesDoc.queryAll("style:style")
-        styleNodes.forEach(node => {
-            const styleName = node.getAttribute("style:name")
+        styleNodes.forEach((node: any) => {
+            const styleName = attr(node, "style:name")
             this.styles[styleName] = this.parseStyle(node)
         })
-        const contentStyleNodes = this.contentDoc.queryAll("style:style")
-        contentStyleNodes.forEach(node => {
-            const styleName = node.getAttribute("style:name")
+        const contentStyleNodes = this.contentDoc!.queryAll("style:style")
+        contentStyleNodes.forEach((node: any) => {
+            const styleName = attr(node, "style:name")
             this.styles[styleName] = this.parseStyle(node)
         })
     }
 
-    parseStyle(styleNode) {
-        const properties = {
+    parseStyle(styleNode: any) {
+        const properties: Record<string, any> = {
             // Basic style information
-            parentStyleName: styleNode.getAttribute("style:parent-style-name"),
+            parentStyleName: attr(styleNode, "style:parent-style-name"),
             isSection:
-                styleNode.getAttribute("style:family") === "section" ||
+                attr(styleNode, "style:family") === "section" ||
                 Boolean(styleNode.query("style:section-properties")),
-            title: styleNode.getAttribute("style:display-name"),
+            title: attr(styleNode, "style:display-name"),
 
             // Family and name info
-            family: styleNode.getAttribute("style:family"),
-            name: styleNode.getAttribute("style:name"),
+            family: attr(styleNode, "style:family"),
+            name: attr(styleNode, "style:name"),
 
             // Heading related
             isHeading:
-                styleNode.getAttribute("style:family") === "paragraph" &&
-                (styleNode
-                    .getAttribute("style:name")
+                attr(styleNode, "style:family") === "paragraph" &&
+                (attr(styleNode, "style:name")
                     .toLowerCase()
                     .includes("heading") ||
-                    styleNode
-                        .getAttribute("style:parent-style-name")
+                    attr(styleNode, "style:parent-style-name")
                         ?.toLowerCase()
                         .includes("heading")),
-            outlineLevel: styleNode.getAttribute("text:outline-level"),
+            outlineLevel: attr(styleNode, "text:outline-level"),
 
             // Text properties
             textProperties: {},
@@ -221,23 +252,19 @@ export class OdtConvert {
         const textProperties = styleNode.query("style:text-properties")
         if (textProperties) {
             properties.textProperties = {
-                bold: textProperties.getAttribute("fo:font-weight") === "bold",
+                bold: attr(textProperties, "fo:font-weight") === "bold",
                 italic:
-                    textProperties.getAttribute("fo:font-style") === "italic",
+                    attr(textProperties, "fo:font-style") === "italic",
                 fontSize: this.convertLength(
-                    textProperties.getAttribute("fo:font-size")
+                    attr(textProperties, "fo:font-size")
                 ),
-                fontFamily: textProperties.getAttribute("fo:font-family"),
-                color: textProperties.getAttribute("fo:color"),
-                backgroundColor: textProperties.getAttribute(
-                    "fo:background-color"
-                ),
+                fontFamily: attr(textProperties, "fo:font-family"),
+                color: attr(textProperties, "fo:color"),
+                backgroundColor: attr(textProperties, "fo:background-color"),
                 textDecoration:
-                    textProperties.getAttribute("style:text-underline-style") ||
-                    textProperties.getAttribute(
-                        "style:text-line-through-style"
-                    ),
-                textPosition: textProperties.getAttribute("style:text-position")
+                    attr(textProperties, "style:text-underline-style") ||
+                    attr(textProperties, "style:text-line-through-style"),
+                textPosition: attr(textProperties, "style:text-position")
             }
         }
 
@@ -248,26 +275,24 @@ export class OdtConvert {
         if (paragraphProperties) {
             properties.paragraphProperties = {
                 marginTop: this.convertLength(
-                    paragraphProperties.getAttribute("fo:margin-top")
+                    attr(paragraphProperties, "fo:margin-top")
                 ),
                 marginBottom: this.convertLength(
-                    paragraphProperties.getAttribute("fo:margin-bottom")
+                    attr(paragraphProperties, "fo:margin-bottom")
                 ),
                 marginLeft: this.convertLength(
-                    paragraphProperties.getAttribute("fo:margin-left")
+                    attr(paragraphProperties, "fo:margin-left")
                 ),
                 marginRight: this.convertLength(
-                    paragraphProperties.getAttribute("fo:margin-right")
+                    attr(paragraphProperties, "fo:margin-right")
                 ),
-                textAlign: paragraphProperties.getAttribute("fo:text-align"),
-                lineHeight: paragraphProperties.getAttribute("fo:line-height"),
-                backgroundColor: paragraphProperties.getAttribute(
-                    "fo:background-color"
-                ),
+                textAlign: attr(paragraphProperties, "fo:text-align"),
+                lineHeight: attr(paragraphProperties, "fo:line-height"),
+                backgroundColor: attr(paragraphProperties, "fo:background-color"),
                 padding: this.convertLength(
-                    paragraphProperties.getAttribute("fo:padding")
+                    attr(paragraphProperties, "fo:padding")
                 ),
-                borderStyle: paragraphProperties.getAttribute("fo:border-style")
+                borderStyle: attr(paragraphProperties, "fo:border-style")
             }
         }
 
@@ -275,45 +300,43 @@ export class OdtConvert {
         const sectionProperties = styleNode.query("style:section-properties")
         if (sectionProperties) {
             properties.sectionProperties = {
-                columnCount: sectionProperties.getAttribute("fo:column-count"),
+                columnCount: attr(sectionProperties, "fo:column-count"),
                 columnGap: this.convertLength(
-                    sectionProperties.getAttribute("fo:column-gap")
+                    attr(sectionProperties, "fo:column-gap")
                 ),
-                backgroundColor: sectionProperties.getAttribute(
-                    "fo:background-color"
-                ),
+                backgroundColor: attr(sectionProperties, "fo:background-color"),
                 margins: {
                     top: this.convertLength(
-                        sectionProperties.getAttribute("fo:margin-top")
+                        attr(sectionProperties, "fo:margin-top")
                     ),
                     bottom: this.convertLength(
-                        sectionProperties.getAttribute("fo:margin-bottom")
+                        attr(sectionProperties, "fo:margin-bottom")
                     ),
                     left: this.convertLength(
-                        sectionProperties.getAttribute("fo:margin-left")
+                        attr(sectionProperties, "fo:margin-left")
                     ),
                     right: this.convertLength(
-                        sectionProperties.getAttribute("fo:margin-right")
+                        attr(sectionProperties, "fo:margin-right")
                     )
                 }
             }
         }
 
         // Additional table-specific properties
-        if (styleNode.getAttribute("style:family") === "table") {
+        if (attr(styleNode, "style:family") === "table") {
             properties.tableProperties = {
-                align: styleNode.getAttribute("table:align"),
+                align: attr(styleNode, "table:align"),
                 width: this.convertLength(
-                    styleNode.getAttribute("style:width")
+                    attr(styleNode, "style:width")
                 ),
-                relWidth: styleNode.getAttribute("style:rel-width")
+                relWidth: attr(styleNode, "style:rel-width")
             }
         }
 
         return properties
     }
 
-    convertObject(node, attrs) {
+    convertObject(node: any, attrs: any) {
         const mathEl = node.query("math")
         if (mathEl) {
             attrs = Object.assign(
@@ -331,14 +354,17 @@ export class OdtConvert {
     }
 
     parseComments() {
-        const annotations = this.contentDoc.queryAll("office:annotation")
-        annotations.forEach(annotation => {
+        if (!this.contentDoc) {
+            return
+        }
+        const annotations = this.contentDoc!.queryAll("office:annotation")
+        annotations.forEach((annotation: any) => {
             const username = annotation.query("dc:creator")?.textContent || ""
             const date = new Date(
                 annotation.query("dc:date")?.textContent || ""
             ).getTime()
 
-            const id = (annotation.getAttribute("office:name") || "")
+            const id = (attr(annotation, "office:name") || "")
                 .replace(/\D/g, "")
                 .slice(0, 9)
 
@@ -350,16 +376,16 @@ export class OdtConvert {
                     date,
                     comment: annotation
                         .queryAll("text:p")
-                        .map(par => this.convertBlockNode(par))
-                        .filter(par => par)
+                        .map((par: any) => this.convertBlockNode(par))
+                        .filter((par: any) => par)
                         .flat(),
                     answers: [],
                     resolved:
-                        annotation.getAttribute("loext:resolved") === "true"
+                        attr(annotation, "loext:resolved") === "true"
                 }
             } else {
                 const parentId = (
-                    annotation.getAttribute("loext:parent-name") || ""
+                    attr(annotation, "loext:parent-name") || ""
                 )
                     .replace(/\D/g, "")
                     .slice(0, 9)
@@ -373,8 +399,8 @@ export class OdtConvert {
                         answer: annotation
                             .queryAll("text:p")
                             .slice(1)
-                            .map(par => this.convertBlockNode(par))
-                            .filter(par => par)
+                            .map((par: any) => this.convertBlockNode(par))
+                            .filter((par: any) => par)
                             .flat()
                     })
                 }
@@ -382,11 +408,11 @@ export class OdtConvert {
         })
     }
 
-    collectReferenceableObjects(node) {
+    collectReferenceableObjects(node: any) {
         // Handle heading bookmarks
         const bookmarkStarts = node.queryAll("text:bookmark-start")
-        bookmarkStarts.forEach(mark => {
-            const refName = mark.getAttribute("text:name")
+        bookmarkStarts.forEach((mark: any) => {
+            const refName = attr(mark, "text:name")
             if (!refName) {
                 return
             }
@@ -409,8 +435,8 @@ export class OdtConvert {
 
         // Handle figure sequences
         const sequences = node.queryAll("text:sequence")
-        sequences.forEach(sequence => {
-            const refName = sequence.getAttribute("text:ref-name")
+        sequences.forEach((sequence: any) => {
+            const refName = attr(sequence, "text:ref-name")
             if (!refName) {
                 return
             }
@@ -432,11 +458,11 @@ export class OdtConvert {
         })
     }
 
-    convert() {
+    convert(): FidusDoc {
         const templateParts = this.template.content.content.slice()
         templateParts.shift()
 
-        const document = {
+        const document: any = {
             type: "doc",
             attrs: {
                 import_id: this.importId
@@ -464,25 +490,25 @@ export class OdtConvert {
                 ]
             })
         }
-        title.containerNodes.forEach(node => {
-            node.parentElement.removeChild(node)
+        title.containerNodes.forEach((node: any) => {
+            node.parentElement!.removeChild(node)
         })
 
-        document.attrs.title =
-            title.content.map(node => node.textContent).join("") ||
+        ;(document.attrs as any).title =
+            title.content.map((node: any) => node.textContent).join("") ||
             gettext("Untitled")
 
         // Get all content sections from the ODT
-        const body = this.contentDoc.query("office:text")
+        const body = this.contentDoc!.query("office:text")
         if (!body) {
-            return document
+            return document as FidusDoc
         }
 
         // Look for metadata sections first (author, abstract, etc.)
         const metadataContent = this.extractMetadata()
-        metadataContent.forEach(({type, attrs, content}) => {
+        metadataContent.forEach(({type, attrs, content}: any) => {
             const templatePart = templateParts.find(
-                part => part.attrs.metadata === type
+                (part: any) => part.attrs.metadata === type
             )
             if (templatePart) {
                 document.content.push({
@@ -494,8 +520,8 @@ export class OdtConvert {
                     content: content.content
                 })
                 // Remove paragraphs from content so they are not added to body
-                content.containerNodes.forEach(node => {
-                    node.parentElement.removeChild(node)
+                content.containerNodes.forEach((node: any) => {
+                    node.parentElement!.removeChild(node)
                 })
             }
         })
@@ -504,7 +530,7 @@ export class OdtConvert {
         const sections = this.groupContentIntoSections(body)
 
         // Map ODT sections to template parts
-        sections.forEach(section => {
+        sections.forEach((section: any) => {
             // Find matching template part
             const templatePart = this.findMatchingTemplatePart(
                 section.title,
@@ -533,41 +559,39 @@ export class OdtConvert {
         // Add remaining content to body section
         const unassignedContent = sections
             .filter(
-                section =>
+                (section: any) =>
                     !this.findMatchingTemplatePart(section.title, templateParts)
             )
-            .flatMap(section => section.content)
+            .flatMap((section: any) => section.content)
 
         if (unassignedContent.length) {
             // Find default body template part
             const bodyTemplatePart = templateParts.find(
-                part => !part.attrs.metadata && part.type === "richtext_part"
+                (part: any) => !part.attrs.metadata && part.type === "richtext_part"
             )
 
             document.content.push({
                 type: "richtext_part",
                 attrs: {
-                    title: bodyTemplatePart
-                        ? bodyTemplatePart.attrs.title
-                        : "Body",
-                    id: bodyTemplatePart ? bodyTemplatePart.attrs.id : "body",
+                    title: bodyTemplatePart?.attrs?.title || "Body",
+                    id: bodyTemplatePart?.attrs?.id || "body",
                     marks: ["strong", "em", "link"]
                 },
                 content: unassignedContent
             })
         }
 
-        return document
+        return document as FidusDoc
     }
 
     extractMetadata() {
-        const metadata = []
+        const metadata: any[] = []
 
         // Try structured contributor data from meta.xml first
         const contributorsByRole = this.extractContributorsFromMeta()
         if (Object.keys(contributorsByRole).length) {
             Object.entries(contributorsByRole).forEach(
-                ([role, contributors]) => {
+                ([role, contributors]: any) => {
                     metadata.push({
                         type: role,
                         content: {content: contributors, containerNodes: []}
@@ -612,10 +636,10 @@ export class OdtConvert {
         }
 
         const userDefined = this.metaDoc.queryAll("meta:user-defined")
-        const contributors = []
+        const contributors: any[] = []
 
-        userDefined.forEach(prop => {
-            const name = prop.getAttribute("meta:name")
+        userDefined.forEach((prop: any) => {
+            const name = attr(prop, "meta:name")
             if (!name || !name.startsWith("fidus_contributor_")) {
                 return
             }
@@ -657,8 +681,8 @@ export class OdtConvert {
             }
         })
 
-        const byRole = {}
-        contributors.forEach(contributor => {
+        const byRole: Record<string, any> = {}
+        contributors.forEach((contributor: any) => {
             if (!contributor) {
                 return
             }
@@ -673,13 +697,13 @@ export class OdtConvert {
     }
 
     extractAuthors() {
-        const authors = []
+        const authors: any[] = []
 
         // Try to find author information in metadata
-        const metaAuthors = this.contentDoc.queryAll("meta:user-defined", {
+        const metaAuthors = this.contentDoc!.queryAll("meta:user-defined", {
             "meta:name": "author"
         })
-        metaAuthors.forEach(authorMeta => {
+        metaAuthors.forEach((authorMeta: any) => {
             const authorText = authorMeta.textContent
             const [firstname = "", lastname = ""] = authorText.split(" ", 2)
             authors.push({
@@ -700,7 +724,7 @@ export class OdtConvert {
         }
 
         // Also check for creator in document metadata
-        const creator = this.contentDoc.query("meta:creator")
+        const creator = this.contentDoc!.query("meta:creator")
         if (creator) {
             const [firstname = "", lastname = ""] = creator.textContent.split(
                 " ",
@@ -728,16 +752,16 @@ export class OdtConvert {
     extractAbstract() {
         // Look for section titled "Abstract" or with abstract style
         const abstractSection =
-            this.contentDoc.query("text:section", {
+            this.contentDoc!.query("text:section", {
                 "text:style-name": "Abstract"
             }) ||
-            this.contentDoc.query("text:h", {
+            this.contentDoc!.query("text:h", {
                 "text:outline-level": "1"
             }) // Then check content for "Abstract"
 
         if (
             abstractSection &&
-            (abstractSection.getAttribute("text:style-name") === "Abstract" ||
+            (attr(abstractSection, "text:style-name") === "Abstract" ||
                 abstractSection.textContent.includes("Abstract"))
         ) {
             return {
@@ -755,8 +779,8 @@ export class OdtConvert {
     extractKeywords() {
         // Look for keywords section or metadata
         const keywordsSection =
-            this.contentDoc.query("text:p", {"text:style-name": "Keywords"}) ||
-            this.contentDoc.query("meta:user-defined", {
+            this.contentDoc!.query("text:p", {"text:style-name": "Keywords"}) ||
+            this.contentDoc!.query("meta:user-defined", {
                 "meta:name": "keywords"
             })
 
@@ -770,14 +794,14 @@ export class OdtConvert {
         return {content: [], containerNodes: []}
     }
 
-    findMatchingTemplatePart(sectionTitle, templateParts) {
+    findMatchingTemplatePart(sectionTitle: any, templateParts: any) {
         if (!sectionTitle) {
             return null
         }
 
         // Try exact match first
         let matchingPart = templateParts.find(
-            part =>
+            (part: any) =>
                 part.type === "richtext_part" &&
                 !part.attrs.metadata &&
                 part.attrs.title.toLowerCase() === sectionTitle.toLowerCase()
@@ -786,7 +810,7 @@ export class OdtConvert {
         if (!matchingPart) {
             // Try fuzzy matching if exact match fails
             matchingPart = templateParts.find(
-                part =>
+                (part: any) =>
                     part.type === "richtext_part" &&
                     !part.attrs.metadata &&
                     this.isSimilarTitle(part.attrs.title, sectionTitle)
@@ -796,9 +820,9 @@ export class OdtConvert {
         return matchingPart
     }
 
-    isSimilarTitle(title1, title2) {
+    isSimilarTitle(title1: any, title2: any) {
         // Remove special characters and extra spaces
-        const normalize = str =>
+        const normalize = (str: any) =>
             str
                 .toLowerCase()
                 .replace(/[^a-z0-9]/g, "")
@@ -816,7 +840,7 @@ export class OdtConvert {
 
     extractTitle() {
         // First try to find paragraph with Title style
-        const titleParagraph = this.contentDoc.query("text:p", {
+        const titleParagraph = this.contentDoc!.query("text:p", {
             "text:style-name": "Title"
         })
         if (titleParagraph) {
@@ -827,7 +851,7 @@ export class OdtConvert {
         }
 
         // Fall back to first heading
-        const titleHeading = this.contentDoc.query("text:h", {
+        const titleHeading = this.contentDoc!.query("text:h", {
             "text:outline-level": "1"
         })
         if (titleHeading) {
@@ -838,14 +862,14 @@ export class OdtConvert {
         }
 
         // Check for other common title style names
-        const commonTitleStyles = [
+        const commonTitleStyles: any[] = [
             "title",
             "doctitle",
             "document-title",
             "heading-title"
         ]
         for (const styleName of commonTitleStyles) {
-            const titleElement = this.contentDoc.query("text:p", {
+            const titleElement = this.contentDoc!.query("text:p", {
                 "text:style-name": styleName
             })
             if (titleElement) {
@@ -857,9 +881,9 @@ export class OdtConvert {
         }
 
         // Check style properties for title-like formatting
-        const firstParagraph = this.contentDoc.query("text:p")
+        const firstParagraph = this.contentDoc!.query("text:p")
         if (firstParagraph) {
-            const styleName = firstParagraph.getAttribute("text:style-name")
+            const styleName = attr(firstParagraph, "text:style-name")
             const style = this.styles[styleName]
 
             if (style && this.isTitleStyle(style)) {
@@ -878,7 +902,7 @@ export class OdtConvert {
         }
     }
 
-    isTitleStyle(style) {
+    isTitleStyle(style: any): boolean {
         // Check if style or its parent has characteristics of a title style
         if (!style) {
             return false
@@ -919,7 +943,7 @@ export class OdtConvert {
         return false
     }
 
-    getSectionTitle(node, styleName) {
+    getSectionTitle(node: any, styleName: any) {
         if (!node || !styleName) {
             return null
         }
@@ -927,7 +951,7 @@ export class OdtConvert {
         // For headings, use the text content as section title
         if (node.tagName === "text:h") {
             // Get the heading level
-            const level = parseInt(node.getAttribute("text:outline-level")) || 1
+            const level = parseInt(attr(node, "text:outline-level")) || 1
 
             // Only use level 1 and 2 headings as section titles
             if (level <= 2) {
@@ -961,7 +985,7 @@ export class OdtConvert {
 
         // For text:section elements, check for section-name attribute
         if (node.tagName === "text:section") {
-            const sectionName = node.getAttribute("text:name")
+            const sectionName = attr(node, "text:name")
             if (sectionName) {
                 return this.formatSectionName(sectionName)
             }
@@ -970,7 +994,7 @@ export class OdtConvert {
         return null
     }
 
-    formatSectionName(name) {
+    formatSectionName(name: any) {
         // Remove common suffixes
         name = name.replace(/_?(section|part|chapter)$/i, "")
 
@@ -980,22 +1004,22 @@ export class OdtConvert {
         // Capitalize first letter of each word and join
         return words
             .map(
-                word =>
+                (word: any) =>
                     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
             )
             .join(" ")
             .trim()
     }
 
-    groupContentIntoSections(body) {
-        const sections = []
-        let currentSection = {
+    groupContentIntoSections(body: any) {
+        const sections: any[] = []
+        let currentSection: Record<string, any> = {
             title: null,
             content: []
         }
 
-        body.children.forEach(node => {
-            const styleName = node.getAttribute("text:style-name")
+        body.children.forEach((node: any) => {
+            const styleName = attr(node, "text:style-name")
             const title = this.getSectionTitle(node, styleName)
 
             if (title && this.isHeadingStyle(styleName)) {
@@ -1010,9 +1034,9 @@ export class OdtConvert {
             }
 
             const converted = [this.convertBlockNode(node)]
-                .filter(node => node)
+                .filter((node: any) => node)
                 .flat()
-            converted.forEach(node => currentSection.content.push(node))
+            converted.forEach((node: any) => currentSection.content.push(node))
         })
 
         // Add final section
@@ -1023,7 +1047,7 @@ export class OdtConvert {
         return sections
     }
 
-    isCodeBlockStyle(styleName, style) {
+    isCodeBlockStyle(styleName: any, style: any): boolean {
         if (!styleName) {
             return false
         }
@@ -1047,7 +1071,7 @@ export class OdtConvert {
         // Check text properties for monospace fonts
         if (style?.textProperties?.fontFamily) {
             const fontFamily = style.textProperties.fontFamily.toLowerCase()
-            const monospacePatterns = [
+            const monospacePatterns: any[] = [
                 "courier",
                 "consolas",
                 "monaco",
@@ -1059,7 +1083,7 @@ export class OdtConvert {
                 "source code pro",
                 "fira code"
             ]
-            return monospacePatterns.some(pattern =>
+            return monospacePatterns.some((pattern: any) =>
                 fontFamily.includes(pattern)
             )
         }
@@ -1067,7 +1091,7 @@ export class OdtConvert {
         return false
     }
 
-    isHeadingStyle(styleName) {
+    isHeadingStyle(styleName: any): boolean {
         if (!styleName) {
             return false
         }
@@ -1106,15 +1130,15 @@ export class OdtConvert {
         )
     }
 
-    convertContainer(container) {
+    convertContainer(container: any) {
         return container.children
-            .map(node => this.convertBlockNode(node))
-            .filter(node => node)
+            .map((node: any) => this.convertBlockNode(node))
+            .filter((node: any) => node)
             .flat()
     }
 
-    convertBlockNode(node) {
-        const track = this.currentTracks.map(track => ({
+    convertBlockNode(node: any) {
+        const track = this.currentTracks.map((track: any) => ({
             type: track.type,
             user: track.attrs.user,
             username: track.attrs.username,
@@ -1155,7 +1179,7 @@ export class OdtConvert {
                 // Skip bibliography sections inserted by citation managers
                 // (Zotero: name contains "ZOTERO_BIBL"/"CSL_BIBLIOGRAPHY",
                 //  JabRef: name is "JR_bib" / "JR_BIB").
-                const sectionName = node.getAttribute("text:name") || ""
+                const sectionName = attr(node, "text:name") || ""
                 if (isOdtBibliographySection(sectionName)) {
                     return null
                 }
@@ -1169,8 +1193,8 @@ export class OdtConvert {
         }
     }
 
-    convertParagraph(node, attrs = {}) {
-        const styleName = node.getAttribute("text:style-name")
+    convertParagraph(node: any, attrs: any = {}) {
+        const styleName = attr(node, "text:style-name")
         const style = this.styles[styleName]
 
         // Check if this is a code block (preformatted text)
@@ -1218,15 +1242,15 @@ export class OdtConvert {
         }
     }
 
-    convertHeading(node, attrs = {}) {
+    convertHeading(node: any, attrs: any = {}) {
         const level =
-            parseInt(node.getAttribute("text:outline-level") || 1) || 1
+            parseInt(attr(node, "text:outline-level") || "1") || 1
 
         // Check for bookmark
         let id = null
         const bookmarkStart = node.query("text:bookmark-start")
         if (bookmarkStart) {
-            const refName = bookmarkStart.getAttribute("text:name")
+            const refName = attr(bookmarkStart, "text:name")
             if (refName && this.referenceableObjects[refName]) {
                 id = this.referenceableObjects[refName].id
             }
@@ -1244,17 +1268,17 @@ export class OdtConvert {
         }
     }
 
-    convertNodeChildren(node, currentStyleMarks = []) {
+    convertNodeChildren(node: any, currentStyleMarks: any = []) {
         let insideCitationReferenceMark = false
         let insideBibliographyReferenceMark = false
 
         return node.children
-            .map(child => {
+            .map((child: any) => {
                 if (insideBibliographyReferenceMark) {
                     // Swallow all rendered bibliography content until the
                     // closing mark — we have our own bibliography system.
                     if (child.tagName === "text:reference-mark-end") {
-                        const name = child.getAttribute("text:name")
+                        const name = attr(child, "text:name")
                         if (name && isOdtBibliographyReferenceMark(name)) {
                             insideBibliographyReferenceMark = false
                         }
@@ -1265,7 +1289,7 @@ export class OdtConvert {
                 if (insideCitationReferenceMark) {
                     if (child.tagName === "text:reference-mark-end") {
                         // Process citation when we hit the end mark
-                        const name = child.getAttribute("text:name")
+                        const name = attr(child, "text:name")
                         if (name && isOdtCitationMark(name)) {
                             insideCitationReferenceMark = false
                             return this.convertCitation(name, currentStyleMarks)
@@ -1276,10 +1300,10 @@ export class OdtConvert {
 
                 switch (child.tagName) {
                     case "text:change-start": {
-                        const changeId = child.getAttribute("text:change-id")
+                        const changeId = attr(child, "text:change-id")
                         const track = this.tracks[changeId]
                         if (track) {
-                            const trackMark = {
+                            const trackMark: Record<string, any> = {
                                 type: track.type,
                                 attrs: {
                                     user: track.user,
@@ -1295,11 +1319,11 @@ export class OdtConvert {
                         return null
                     }
                     case "text:change-end": {
-                        const changeId = child.getAttribute("text:change-id")
+                        const changeId = attr(child, "text:change-id")
                         const track = this.tracks[changeId]
                         if (track) {
                             this.currentTracks = this.currentTracks.filter(
-                                mark => mark.type !== track.type
+                                (mark: any) => mark.type !== track.type
                             )
                         }
                         return null
@@ -1323,7 +1347,7 @@ export class OdtConvert {
                     case "office:annotation-end":
                         return this.convertAnnotationEnd(child)
                     case "text:reference-mark-start": {
-                        const name = child.getAttribute("text:name")
+                        const name = attr(child, "text:name")
                         if (name && isOdtCitationMark(name)) {
                             insideCitationReferenceMark = true
                         } else if (
@@ -1351,14 +1375,14 @@ export class OdtConvert {
                         )
                 }
             })
-            .filter(node => node)
+            .filter((node: any) => node)
             .flat()
     }
 
-    getCurrentMarks(currentStyleMarks = []) {
-        const commentMarks = []
+    getCurrentMarks(currentStyleMarks: any = []) {
+        const commentMarks: any[] = []
         // Add comment marks for any active comment IDs
-        this.currentCommentIds.forEach(commentId => {
+        this.currentCommentIds.forEach((commentId: any) => {
             commentMarks.push({
                 type: "comment",
                 attrs: {
@@ -1369,8 +1393,8 @@ export class OdtConvert {
         return [...currentStyleMarks, ...this.currentTracks, ...commentMarks]
     }
 
-    convertText(text, currentStyleMarks) {
-        const textNode = {
+    convertText(text: any, currentStyleMarks: any) {
+        const textNode: Record<string, any> = {
             type: "text",
             text
         }
@@ -1381,8 +1405,8 @@ export class OdtConvert {
         return textNode
     }
 
-    convertSpan(node, currentStyleMarks) {
-        const styleName = node.getAttribute("text:style-name")
+    convertSpan(node: any, currentStyleMarks: any) {
+        const styleName = attr(node, "text:style-name")
         const style = this.styles[styleName]
         if (style?.textProperties?.bold) {
             currentStyleMarks = [...currentStyleMarks, {type: "strong"}]
@@ -1402,7 +1426,7 @@ export class OdtConvert {
         // Handle inline code (monospace fonts)
         if (style?.textProperties?.fontFamily) {
             const fontFamily = style.textProperties.fontFamily.toLowerCase()
-            const monospacePatterns = [
+            const monospacePatterns: any[] = [
                 "courier",
                 "consolas",
                 "monaco",
@@ -1417,7 +1441,7 @@ export class OdtConvert {
                 "droid sans mono",
                 "monospace"
             ]
-            const isMonospace = monospacePatterns.some(pattern =>
+            const isMonospace = monospacePatterns.some((pattern: any) =>
                 fontFamily.includes(pattern)
             )
             if (isMonospace) {
@@ -1427,7 +1451,7 @@ export class OdtConvert {
         return this.convertNodeChildren(node, currentStyleMarks)
     }
 
-    convertFootnote(node, currentStyleMarks) {
+    convertFootnote(node: any, currentStyleMarks: any) {
         const noteBody = node.query("text:note-body")
         if (!noteBody) {
             return null
@@ -1445,7 +1469,7 @@ export class OdtConvert {
         )
         const referenceMarkEnd = firstParagraph.query("text:reference-mark-end")
 
-        const markName = referenceMarkStart?.getAttribute("text:name")
+        const markName = attr(referenceMarkStart, "text:name")
         if (
             referenceMarkStart &&
             referenceMarkEnd &&
@@ -1453,7 +1477,7 @@ export class OdtConvert {
             isOdtCitationMark(markName) &&
             // Check that there's no content outside the reference marks
             firstParagraph.children.every(
-                child =>
+                (child: any) =>
                     child.tagName === "text:reference-mark-start" ||
                     child.tagName === "text:reference-mark-end" ||
                     (child.tagName === "text:span" &&
@@ -1477,7 +1501,7 @@ export class OdtConvert {
         }
     }
 
-    convertCitation(markName, currentStyleMarks) {
+    convertCitation(markName: any, currentStyleMarks: any) {
         const citationNode = parseOdtReferenceMark(
             markName,
             this.bibliography,
@@ -1490,7 +1514,7 @@ export class OdtConvert {
         return null
     }
 
-    convertBibliographyMark(bibMarkNode, currentStyleMarks) {
+    convertBibliographyMark(bibMarkNode: any, currentStyleMarks: any) {
         const citationNode = parseOdtBibliographyMark(
             bibMarkNode,
             this.bibliography
@@ -1502,8 +1526,8 @@ export class OdtConvert {
         return null
     }
 
-    convertList(node, attrs) {
-        const listStyle = node.getAttribute("text:style-name")
+    convertList(node: any, attrs: any) {
+        const listStyle = attr(node, "text:style-name")
         const isOrdered = this.isOrderedList(listStyle)
 
         attrs = Object.assign(
@@ -1520,15 +1544,15 @@ export class OdtConvert {
         return {
             type: isOrdered ? "ordered_list" : "bullet_list",
             attrs,
-            content: node.queryAll("text:list-item").map(item => ({
+            content: node.queryAll("text:list-item").map((item: any) => ({
                 type: "list_item",
                 content: this.convertContainer(item)
             }))
         }
     }
 
-    convertAnnotationStart(node) {
-        const commentId = (node.getAttribute("office:name") || "")
+    convertAnnotationStart(node: any) {
+        const commentId = (attr(node, "office:name") || "")
             .replace(/\D/g, "")
             .slice(0, 9)
         if (commentId && this.comments[commentId]) {
@@ -1537,8 +1561,8 @@ export class OdtConvert {
         return null
     }
 
-    convertAnnotationEnd(node) {
-        const commentId = (node.getAttribute("office:name") || "")
+    convertAnnotationEnd(node: any) {
+        const commentId = (attr(node, "office:name") || "")
             .replace(/\D/g, "")
             .slice(0, 9)
         if (commentId) {
@@ -1550,8 +1574,8 @@ export class OdtConvert {
         return null
     }
 
-    convertHeadingReference(node) {
-        const refName = node.getAttribute("text:ref-name")
+    convertHeadingReference(node: any) {
+        const refName = attr(node, "text:ref-name")
         if (!refName || !this.referenceableObjects[refName]) {
             return null
         }
@@ -1570,8 +1594,8 @@ export class OdtConvert {
         }
     }
 
-    convertFigureReference(node) {
-        const refName = node.getAttribute("text:ref-name")
+    convertFigureReference(node: any) {
+        const refName = attr(node, "text:ref-name")
         if (!refName || !this.referenceableObjects[refName]) {
             return null
         }
@@ -1593,7 +1617,7 @@ export class OdtConvert {
         }
     }
 
-    isOrderedList(styleName) {
+    isOrderedList(styleName: any) {
         if (!this.stylesDoc) {
             return false
         }
@@ -1603,7 +1627,7 @@ export class OdtConvert {
         return listStyle?.query("text:list-level-style-number") !== null
     }
 
-    convertImage(node, attrs = {}) {
+    convertImage(node: any, attrs: any = {}) {
         const imageElement = node.query("draw:image")
         if (!imageElement) {
             return null
@@ -1614,14 +1638,14 @@ export class OdtConvert {
             return null
         }
 
-        const href = imageElement.getAttribute("xlink:href")
+        const href = attr(imageElement, "xlink:href")
         if (!href || !href.startsWith("Pictures/")) {
             return null
         }
 
         const imageId = Math.floor(Math.random() * 1000000)
-        const width = this.convertLength(node.getAttribute("svg:width"))
-        const height = this.convertLength(node.getAttribute("svg:height"))
+        const width = this.convertLength(attr(node, "svg:width"))
+        const height = this.convertLength(attr(node, "svg:height"))
 
         const title = href.split("/").pop()
         this.images[imageId] = {
@@ -1645,7 +1669,7 @@ export class OdtConvert {
         const sequence = frame.query("text:sequence")
         let figureId = null
         if (sequence) {
-            const refName = sequence.getAttribute("text:ref-name")
+            const refName = attr(sequence, "text:ref-name")
             if (refName && this.referenceableObjects[refName]) {
                 figureId = this.referenceableObjects[refName].id
             }
@@ -1664,7 +1688,7 @@ export class OdtConvert {
             attrs
         )
 
-        const figureCaption = {type: "figure_caption"}
+        const figureCaption: Record<string, any> = {type: "figure_caption"}
         if (captionContent.length) {
             figureCaption.content = captionContent
         }
@@ -1684,7 +1708,7 @@ export class OdtConvert {
         }
     }
 
-    getImageFileType(filename) {
+    getImageFileType(filename: any) {
         const ext = filename.split(".").pop().toLowerCase()
         switch (ext) {
             case "avif":
@@ -1706,7 +1730,7 @@ export class OdtConvert {
         }
     }
 
-    convertLength(length) {
+    convertLength(length: any) {
         if (!length) {
             return 0
         }
@@ -1741,17 +1765,17 @@ export class OdtConvert {
         }
     }
 
-    convertTable(node, attrs) {
+    convertTable(node: any, attrs: any) {
         const width =
-            node.getAttribute("style:rel-width")?.replace("%", "") || "100"
-        const styleName = node.getAttribute("table:style-name")
+            attr(node, "style:rel-width")?.replace("%", "") || "100"
+        const styleName = attr(node, "table:style-name")
         const style = this.styles[styleName]
         const aligned = style?.tableProperties.align || "center"
 
         attrs = Object.assign(
             {
                 id: randomTableId(),
-                track: parseTracks(node.getAttribute("text:change-id")),
+                track: parseTracks(attr(node, "text:change-id")),
                 width,
                 aligned,
                 layout: "fixed",
@@ -1769,22 +1793,22 @@ export class OdtConvert {
                     type: "table_body",
                     content: node
                         .queryAll("table:table-row")
-                        .map(row => this.convertTableRow(row))
+                        .map((row: any) => this.convertTableRow(row))
                 }
             ]
         }
     }
 
-    convertTableRow(row) {
+    convertTableRow(row: any) {
         return {
             type: "table_row",
             content: row
                 .queryAll(["table:table-cell", "table:covered-table-cell"])
-                .map(cell => this.convertTableCell(cell))
+                .map((cell: any) => this.convertTableCell(cell))
         }
     }
 
-    convertTableCell(node) {
+    convertTableCell(node: any) {
         if (node.tagName === "table:covered-table-cell") {
             return null
         }
@@ -1793,19 +1817,19 @@ export class OdtConvert {
             attrs: {
                 colspan:
                     parseInt(
-                        node.getAttribute("table:number-columns-spanned")
+                        attr(node, "table:number-columns-spanned")
                     ) || 1,
                 rowspan:
-                    parseInt(node.getAttribute("table:number-rows-spanned")) ||
+                    parseInt(attr(node, "table:number-rows-spanned")) ||
                     1,
-                track: parseTracks(node.getAttribute("text:change-id"))
+                track: parseTracks(attr(node, "text:change-id"))
             },
             content: this.convertContainer(node)
         }
     }
 
-    convertLink(node, currentStyleMarks) {
-        const href = node.getAttribute("xlink:href")
+    convertLink(node: any, currentStyleMarks: any) {
+        const href = attr(node, "xlink:href")
         currentStyleMarks = currentStyleMarks.concat([
             {type: "link", attrs: {href}}
         ])
@@ -1821,15 +1845,15 @@ export class OdtConvert {
         // Check content language
         if (this.contentDoc) {
             const langAttr =
-                this.contentDoc.getAttribute("office:default-language") ||
-                this.contentDoc.getAttribute("dc:language")
+                attr(this.contentDoc, "office:default-language") ||
+                attr(this.contentDoc, "dc:language")
             if (langAttr) {
                 return langAttr
             }
 
-            const firstParagraph = this.contentDoc.query("text:p")
+            const firstParagraph = this.contentDoc!.query("text:p")
             if (firstParagraph) {
-                const paraLang = firstParagraph.getAttribute("xml:lang")
+                const paraLang = attr(firstParagraph, "xml:lang")
                 if (paraLang) {
                     return paraLang
                 }
@@ -1841,8 +1865,8 @@ export class OdtConvert {
             const defaultStyle = this.stylesDoc.query("style:default-style")
             if (defaultStyle) {
                 const styleLang =
-                    defaultStyle.getAttribute("fo:language") ||
-                    defaultStyle.getAttribute("style:language-complex")
+                    attr(defaultStyle, "fo:language") ||
+                    attr(defaultStyle, "style:language-complex")
                 if (styleLang) {
                     return styleLang
                 }

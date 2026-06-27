@@ -1,12 +1,34 @@
 import {xmlDOM} from "../../exporter/tools/xml.js"
+import type {XMLElement} from "../../exporter/tools/xml.js"
 import {randomCommentId} from "../../schema/common/index.js"
+import {gettext} from "fwtoolkit"
+import type {FidusMark, FidusNode} from "../../types.js"
+
+function attr(node: unknown, name: string): string {
+    if (node && typeof node === "object" && "getAttribute" in node) {
+        return String((node as XMLElement).getAttribute(name) || "")
+    }
+    return ""
+}
 
 const DEFAULT_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 </w:styles>`
 
 export class DocxParser {
-    constructor(zip) {
+    zip: any
+    styles: Record<string, any>
+    numbering: Record<string, any>
+    comments: Record<string, any>
+    footnotes: Record<string, any>
+    endnotes: Record<string, any>
+    relationships: Record<string, any>
+    images: Record<string, File>
+    coreDoc: XMLElement | null
+    document: XMLElement | null
+    customDoc: XMLElement | null
+
+    constructor(zip: any) {
         this.zip = zip
         this.styles = {}
         this.numbering = {}
@@ -18,9 +40,10 @@ export class DocxParser {
 
         this.coreDoc = null
         this.document = null
+        this.customDoc = null
     }
 
-    init() {
+    init(): Promise<void> {
         return this.parseStyles()
             .then(() => this.parseNumbering())
             .then(() => this.parseComments())
@@ -42,11 +65,11 @@ export class DocxParser {
             const stylesDoc = xmlDOM(content || DEFAULT_STYLES_XML)
             const styles = stylesDoc.queryAll("w:style")
 
-            styles.forEach(style => {
-                const id = style.getAttribute("w:styleId")
-                const type = style.getAttribute("w:type")
-                const name = style.query("w:name")?.getAttribute("w:val")
-                const basedOn = style.query("w:basedOn")?.getAttribute("w:val")
+            styles.forEach((style: any) => {
+                const id = attr(style, "w:styleId")
+                const type = attr(style, "w:type")
+                const name = attr(style.query("w:name"), "w:val")
+                const basedOn = attr(style.query("w:basedOn"), "w:val")
 
                 this.styles[id] = {
                     id,
@@ -58,7 +81,7 @@ export class DocxParser {
                     isCaption:
                         (id && /caption/i.test(id)) ||
                         (basedOn && /caption/i.test(basedOn)),
-                    level: id ? parseInt(id.match(/\d+/)?.[0] || 0) : 0,
+                    level: id ? parseInt(id.match(/\d+/)?.[0] || "0") : 0,
                     basedOn,
                     paragraphProps: this.extractParagraphProperties(style),
                     runProps: this.extractRunProperties(style)
@@ -69,7 +92,7 @@ export class DocxParser {
         }
     }
 
-    isCodeStyle(styleId) {
+    isCodeStyle(styleId: any) {
         let current = styleId
         const visited = new Set()
         while (current && !visited.has(current)) {
@@ -91,7 +114,7 @@ export class DocxParser {
             // Check font family on the style
             if (style.runProps?.fontFamily) {
                 const fontFamily = style.runProps.fontFamily.toLowerCase()
-                const monospacePatterns = [
+                const monospacePatterns: any[] = [
                     "courier",
                     "consolas",
                     "monaco",
@@ -106,7 +129,7 @@ export class DocxParser {
                     "droid sans mono",
                     "monospace"
                 ]
-                if (monospacePatterns.some(p => fontFamily.includes(p))) {
+                if (monospacePatterns.some((p: any) => fontFamily.includes(p))) {
                     return true
                 }
             }
@@ -115,7 +138,7 @@ export class DocxParser {
         return false
     }
 
-    extractParagraphProperties(style) {
+    extractParagraphProperties(style: any) {
         const pPr = style.query("w:pPr")
         if (!pPr) {
             return {}
@@ -123,13 +146,13 @@ export class DocxParser {
 
         return {
             indent: this.extractIndentation(pPr),
-            alignment: pPr.query("w:jc")?.getAttribute("w:val"),
+            alignment: attr(pPr.query("w:jc"), "w:val"),
             numbering: this.extractNumbering(pPr),
             keepNext: Boolean(pPr.query("w:keepNext"))
         }
     }
 
-    extractIndentation(pPr) {
+    extractIndentation(pPr: any) {
         const ind = pPr.query("w:ind")
         if (!ind) {
             return {}
@@ -137,29 +160,29 @@ export class DocxParser {
 
         return {
             left: parseInt(
-                ind.getAttribute("w:left") || ind.getAttribute("w:start") || "0"
+                attr(ind, "w:left") || attr(ind, "w:start") || "0"
             ),
             right: parseInt(
-                ind.getAttribute("w:right") || ind.getAttribute("w:end") || "0"
+                attr(ind, "w:right") || attr(ind, "w:end") || "0"
             ),
-            hanging: parseInt(ind.getAttribute("w:hanging") || "0"),
-            firstLine: parseInt(ind.getAttribute("w:firstLine") || "0")
+            hanging: parseInt(attr(ind, "w:hanging") || "0"),
+            firstLine: parseInt(attr(ind, "w:firstLine") || "0")
         }
     }
 
-    extractNumbering(pPr) {
+    extractNumbering(pPr: any) {
         const numPr = pPr.query("w:numPr")
         if (!numPr) {
             return null
         }
 
         return {
-            id: numPr.query("w:numId")?.getAttribute("w:val"),
-            level: parseInt(numPr.query("w:ilvl")?.getAttribute("w:val") || "0")
+            id: attr(numPr.query("w:numId"), "w:val"),
+            level: parseInt(attr(numPr.query("w:ilvl"), "w:val") || "0")
         }
     }
 
-    extractRunProperties(rPr) {
+    extractRunProperties(rPr: any) {
         if (!rPr) {
             return {}
         }
@@ -167,14 +190,14 @@ export class DocxParser {
         return {
             bold: Boolean(rPr.query("w:b")),
             italic: Boolean(rPr.query("w:i")),
-            underline: rPr.query("w:u")?.getAttribute("w:val") || false,
+            underline: attr(rPr.query("w:u"), "w:val") || false,
             strike: Boolean(rPr.query("w:strike")),
             smallCaps: Boolean(rPr.query("w:smallCaps")),
-            vertAlign: rPr.query("w:vertAlign")?.getAttribute("w:val") || false,
+            vertAlign: attr(rPr.query("w:vertAlign"), "w:val") || false,
             fontSize:
-                parseInt(rPr.query("w:sz")?.getAttribute("w:val") || "0") / 2,
-            color: rPr.query("w:color")?.getAttribute("w:val") || false,
-            fontFamily: rPr.query("w:rFonts")?.getAttribute("w:ascii") || false
+                parseInt(attr(rPr.query("w:sz"), "w:val") || "0") / 2,
+            color: attr(rPr.query("w:color"), "w:val") || false,
+            fontFamily: attr(rPr.query("w:rFonts"), "w:ascii") || false
         }
     }
 
@@ -190,16 +213,16 @@ export class DocxParser {
 
             // Parse abstract numbering definitions
             const abstractNums = numberingDoc.queryAll("w:abstractNum")
-            const abstractNumbering = {}
+            const abstractNumbering: Record<string, any> = {}
 
-            abstractNums.forEach(abstractNum => {
-                const id = abstractNum.getAttribute("w:abstractNumId")
-                const levels = abstractNum.queryAll("w:lvl").map(lvl => ({
-                    level: lvl.getAttribute("w:ilvl"),
-                    format: lvl.query("w:numFmt")?.getAttribute("w:val"),
-                    text: lvl.query("w:lvlText")?.getAttribute("w:val"),
+            abstractNums.forEach((abstractNum: any) => {
+                const id = attr(abstractNum, "w:abstractNumId")
+                const levels = abstractNum.queryAll("w:lvl").map((lvl: any) => ({
+                    level: attr(lvl, "w:ilvl"),
+                    format: attr(lvl.query("w:numFmt"), "w:val"),
+                    text: attr(lvl.query("w:lvlText"), "w:val"),
                     start: parseInt(
-                        lvl.query("w:start")?.getAttribute("w:val") || "1"
+                        attr(lvl.query("w:start"), "w:val") || "1"
                     )
                 }))
                 abstractNumbering[id] = levels
@@ -207,11 +230,10 @@ export class DocxParser {
 
             // Parse numbering instances
             const nums = numberingDoc.queryAll("w:num")
-            nums.forEach(num => {
-                const numId = num.getAttribute("w:numId")
-                const abstractNumId = num
-                    .query("w:abstractNumId")
-                    ?.getAttribute("w:val")
+            nums.forEach((num: any) => {
+                const numId = attr(num, "w:numId")
+                const abstractNumId = attr(num
+                                    .query("w:abstractNumId"), "w:val")
 
                 this.numbering[numId] = {
                     abstractId: abstractNumId,
@@ -224,11 +246,11 @@ export class DocxParser {
         }
     }
 
-    extractNumberingOverrides(num) {
-        return num.queryAll("w:lvlOverride").map(override => ({
-            level: override.getAttribute("w:ilvl"),
+    extractNumberingOverrides(num: any) {
+        return num.queryAll("w:lvlOverride").map((override: any) => ({
+            level: attr(override, "w:ilvl"),
             start: parseInt(
-                override.query("w:startOverride")?.getAttribute("w:val") || "1"
+                attr(override.query("w:startOverride"), "w:val") || "1"
             )
         }))
     }
@@ -246,13 +268,13 @@ export class DocxParser {
             const commentList = commentsDoc.queryAll("w:comment")
 
             // First pass: parse all comments into the expected format
-            commentList.forEach(comment => {
-                const id = comment.getAttribute("w:id")
-                const dateStr = comment.getAttribute("w:date")
+            commentList.forEach((comment: any) => {
+                const id = attr(comment, "w:id")
+                const dateStr = attr(comment, "w:date")
                 this.comments[id] = {
                     user: 0,
                     username:
-                        comment.getAttribute("w:author") || gettext("Unknown"),
+                        attr(comment, "w:author") || gettext("Unknown"),
                     date: dateStr ? new Date(dateStr).getTime() : Date.now(),
                     comment: this.extractCommentContent(comment),
                     answers: [],
@@ -281,13 +303,13 @@ export class DocxParser {
             }
 
             // Parse extended entries into main (no parentParaId) and answer entries
-            const mainEntries = []
-            const answerEntries = []
+            const mainEntries: any[] = []
+            const answerEntries: any[] = []
 
-            extendedEntries.forEach(entry => {
-                const paraId = entry.getAttribute("w15:paraId")
-                const done = entry.getAttribute("w15:done") === "1"
-                const paraIdParent = entry.getAttribute("w15:paraIdParent")
+            extendedEntries.forEach((entry: any) => {
+                const paraId = attr(entry, "w15:paraId")
+                const done = attr(entry, "w15:done") === "1"
+                const paraIdParent = attr(entry, "w15:paraIdParent")
 
                 if (paraId) {
                     if (paraIdParent) {
@@ -307,13 +329,13 @@ export class DocxParser {
             // extended entries appear first in commentsExtended.xml.
             const commentIds = Object.keys(this.comments)
                 .map(Number)
-                .sort((a, b) => a - b)
+                .sort((a: any, b: any) => a - b)
                 .map(String)
 
             // Track which comment IDs are parents vs answers
-            const parentCommentIds = []
+            const parentCommentIds: any[] = []
 
-            commentIds.forEach((commentId, index) => {
+            commentIds.forEach((commentId: any, index: any) => {
                 if (index < mainEntries.length) {
                     // This is a main comment - apply resolved status
                     this.comments[commentId].resolved = mainEntries[index].done
@@ -351,9 +373,9 @@ export class DocxParser {
         }
     }
 
-    extractCommentContent(comment) {
-        const content = []
-        comment.queryAll("w:p").forEach(p => {
+    extractCommentContent(comment: any) {
+        const content: any[] = []
+        comment.queryAll("w:p").forEach((p: any) => {
             content.push({
                 type: "paragraph",
                 content: this.extractParagraphContent(p)
@@ -372,8 +394,8 @@ export class DocxParser {
             }
             const footnotesDoc = xmlDOM(content)
 
-            footnotesDoc.queryAll("w:footnote").forEach(footnote => {
-                const id = footnote.getAttribute("w:id")
+            footnotesDoc.queryAll("w:footnote").forEach((footnote: any) => {
+                const id = attr(footnote, "w:id")
                 if (id === "0" || id === "-1") {
                     return // Skip separator footnotes
                 }
@@ -562,8 +584,8 @@ export class DocxParser {
             }
             const endnotesDoc = xmlDOM(content)
 
-            endnotesDoc.queryAll("w:endnote").forEach(endnote => {
-                const id = endnote.getAttribute("w:id")
+            endnotesDoc.queryAll("w:endnote").forEach((endnote: any) => {
+                const id = attr(endnote, "w:id")
                 if (id === "0" || id === "-1") {
                     return // Skip separator endnotes
                 }
@@ -587,12 +609,12 @@ export class DocxParser {
             }
             const relsDoc = xmlDOM(content)
 
-            relsDoc.queryAll("Relationship").forEach(rel => {
-                const id = rel.getAttribute("Id")
+            relsDoc.queryAll("Relationship").forEach((rel: any) => {
+                const id = attr(rel, "Id")
                 this.relationships[id] = {
                     id,
-                    type: rel.getAttribute("Type"),
-                    target: rel.getAttribute("Target")
+                    type: attr(rel, "Type"),
+                    target: attr(rel, "Target")
                 }
             })
         } catch (err) {
@@ -602,14 +624,14 @@ export class DocxParser {
 
     async parseImages() {
         // Find and extract image files
-        const imageFiles = Object.keys(this.zip.files).filter(path =>
+        const imageFiles = Object.keys(this.zip.files).filter((path: any) =>
             path.startsWith("word/media/")
         )
 
         for (const path of imageFiles) {
             try {
                 const blob = await this.zip.file(path).async("blob")
-                const filename = path.split("/").pop()
+                const filename = path.split("/").pop() || ""
                 const content = this.addMimeType(blob, filename)
                 this.images[filename] = content
             } catch (err) {
@@ -618,13 +640,13 @@ export class DocxParser {
         }
     }
 
-    addMimeType(blob, filename) {
+    addMimeType(blob: any, filename: any) {
         return new File([blob], filename, {
             type: this.getImageFileType(filename)
         })
     }
 
-    getImageFileType(filename) {
+    getImageFileType(filename: any) {
         const ext = filename.split(".").pop().toLowerCase()
         switch (ext) {
             case "avif":
@@ -646,9 +668,9 @@ export class DocxParser {
         }
     }
 
-    extractBlockContent(node) {
-        const content = []
-        node.queryAll("w:p").forEach(p => {
+    extractBlockContent(node: any) {
+        const content: any[] = []
+        node.queryAll("w:p").forEach((p: any) => {
             content.push({
                 type: "paragraph",
                 content: this.extractParagraphContent(p)
@@ -657,9 +679,9 @@ export class DocxParser {
         return content
     }
 
-    extractParagraphContent(p) {
-        const content = []
-        p.queryAll("w:r").forEach(r => {
+    extractParagraphContent(p: any) {
+        const content: any[] = []
+        p.queryAll("w:r").forEach((r: any) => {
             const text = r.query("w:t")?.textContent
             if (!text) {
                 return
@@ -677,8 +699,8 @@ export class DocxParser {
         return content
     }
 
-    createMarksFromFormatting(formatting) {
-        const marks = []
+    createMarksFromFormatting(formatting: any) {
+        const marks: any[] = []
         if (formatting.bold) {
             marks.push({type: "strong"})
         }

@@ -2,6 +2,8 @@
 // that works with our xml dom.
 
 import {xmlDOM} from "../../exporter/tools/xml.js"
+import type {XMLElement} from "../../exporter/tools/xml.js"
+
 const MATH_NS = "http://www.w3.org/1998/Math/MathML"
 
 // Regular expression matching mathematical operators
@@ -10,10 +12,8 @@ const oprx =
 
 /**
  * Converts OMML to MathML
- * @param {XMLElement} omml - OMML XML element
- * @return {string} MathML XML string
  */
-export function omml2mathml(omml) {
+export function omml2mathml(omml: XMLElement): XMLElement {
     // Create the root math element
     const math = xmlDOM(`<math xmlns="${MATH_NS}" display="inline"></math>`)
 
@@ -25,14 +25,12 @@ export function omml2mathml(omml) {
 
 /**
  * Process the OMML document and convert to MathML
- * @param {XMLElement} omml - The OMML element to process
- * @param {XMLElement} math - The parent MathML element
  */
-function processOMML(omml, math) {
+function processOMML(omml: XMLElement, math: XMLElement): void {
     // Handle different OMML elements
     if (omml.tagName === "m:oMathPara") {
         math.setAttribute("display", "block")
-        omml.queryAll("m:oMath").forEach(omath => {
+        omml.queryAll("m:oMath").forEach((omath: any) => {
             processOMML(omath, math)
         })
     } else if (omml.tagName === "m:oMath") {
@@ -45,10 +43,8 @@ function processOMML(omml, math) {
 
 /**
  * Process an OMML element and create corresponding MathML
- * @param {XMLElement} element - The OMML element to process
- * @param {XMLElement} parent - The parent MathML element
  */
-function processElement(element, parent) {
+function processElement(element: XMLElement | null, parent: XMLElement): void {
     if (!element || !element.tagName) {
         return
     }
@@ -127,33 +123,34 @@ function processElement(element, parent) {
 
 /**
  * Process all children of an element
- * @param {XMLElement} element - The element whose children to process
- * @param {XMLElement} parent - The parent MathML element
  */
-function processChildren(element, parent) {
+function processChildren(
+    element: XMLElement | null,
+    parent: XMLElement
+): void {
     if (!element || !element.children) {
         return
     }
 
-    element.children.forEach(child => {
+    element.children.forEach((child: any) => {
         if (typeof child === "object") {
-            processElement(child, parent)
+            processElement(child as XMLElement, parent)
         }
     })
 }
 
 /**
  * Create a MathML element with specified attributes
- * @param {string} tag - The MathML tag name
- * @param {Object} attrs - The attributes to set
- * @param {XMLElement} parent - The parent element
- * @return {XMLElement} The created element
  */
-function createMathElement(tag, attrs = {}, parent = null) {
+function createMathElement(
+    tag: string,
+    attrs: Record<string, unknown> = {},
+    parent: XMLElement | null = null
+): XMLElement {
     const elem = xmlDOM(`<${tag}></${tag}>`)
 
     // Set attributes
-    Object.entries(attrs).forEach(([key, value]) => {
+    Object.entries(attrs).forEach(([key, value]: any) => {
         if (value !== undefined && value !== "") {
             elem.setAttribute(key, value)
         }
@@ -168,10 +165,8 @@ function createMathElement(tag, attrs = {}, parent = null) {
 
 /**
  * Process a fraction element
- * @param {XMLElement} element - The OMML fraction element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processFraction(element, parent) {
+function processFraction(element: XMLElement, parent: XMLElement): void {
     const type = getAttr(element, "m:fPr/m:type", "m:val") || ""
 
     if (type.toLowerCase() === "lin") {
@@ -208,20 +203,18 @@ function processFraction(element, parent) {
 
 /**
  * Process a run of text
- * @param {XMLElement} element - The OMML run element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processRun(element, parent) {
+function processRun(element: XMLElement, parent: XMLElement): void {
     const nor = forceFalse(getAttr(element, "m:rPr/m:nor", "m:val") || "false")
     if (nor) {
         const mtext = createMathElement("mtext", {}, parent)
         const textContent = element
             .queryAll("m:t")
-            .map(t => t.textContent)
+            .map((t: any) => t.textContent)
             .join("")
         mtext.textContent = nbsp(textContent)
     } else {
-        element.queryAll("m:t").forEach(t => {
+        element.queryAll("m:t").forEach((t: any) => {
             const toParse = t.textContent
             const scr = getAttr(element, "m:rPr/m:scr", "m:val")
             const sty = getAttr(element, "m:rPr/m:sty", "m:val")
@@ -237,10 +230,8 @@ function processRun(element, parent) {
 
 /**
  * Process a lower limit element
- * @param {XMLElement} element - The OMML limLow element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processLimLow(element, parent) {
+function processLimLow(element: XMLElement, parent: XMLElement): void {
     const munder = createMathElement("munder", {}, parent)
     const row1 = createMathElement("mrow", {}, munder)
     const row2 = createMathElement("mrow", {}, munder)
@@ -258,10 +249,8 @@ function processLimLow(element, parent) {
 
 /**
  * Process an upper limit element
- * @param {XMLElement} element - The OMML limUpp element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processLimUpp(element, parent) {
+function processLimUpp(element: XMLElement, parent: XMLElement): void {
     const mover = createMathElement("mover", {}, parent)
     const row1 = createMathElement("mrow", {}, mover)
     const row2 = createMathElement("mrow", {}, mover)
@@ -279,10 +268,8 @@ function processLimUpp(element, parent) {
 
 /**
  * Process a subscript element
- * @param {XMLElement} element - The OMML sSub element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processSubscript(element, parent) {
+function processSubscript(element: XMLElement, parent: XMLElement): void {
     const msub = createMathElement("msub", {}, parent)
     const row1 = createMathElement("mrow", {}, msub)
     const row2 = createMathElement("mrow", {}, msub)
@@ -300,10 +287,8 @@ function processSubscript(element, parent) {
 
 /**
  * Process a superscript element
- * @param {XMLElement} element - The OMML sSup element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processSuperscript(element, parent) {
+function processSuperscript(element: XMLElement, parent: XMLElement): void {
     const msup = createMathElement("msup", {}, parent)
     const row1 = createMathElement("mrow", {}, msup)
     const row2 = createMathElement("mrow", {}, msup)
@@ -321,10 +306,8 @@ function processSuperscript(element, parent) {
 
 /**
  * Process a subscript-superscript element
- * @param {XMLElement} element - The OMML sSubSup element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processSubSuperscript(element, parent) {
+function processSubSuperscript(element: XMLElement, parent: XMLElement): void {
     const msubsup = createMathElement("msubsup", {}, parent)
     const row1 = createMathElement("mrow", {}, msubsup)
     const row2 = createMathElement("mrow", {}, msubsup)
@@ -348,10 +331,8 @@ function processSubSuperscript(element, parent) {
 
 /**
  * Process a prescripted element
- * @param {XMLElement} element - The OMML sPre element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processPreScript(element, parent) {
+function processPreScript(element: XMLElement, parent: XMLElement): void {
     const mmultiscripts = createMathElement("mmultiscripts", {}, parent)
     const row = createMathElement("mrow", {}, mmultiscripts)
 
@@ -371,23 +352,21 @@ function processPreScript(element, parent) {
 
 /**
  * Process a matrix element
- * @param {XMLElement} element - The OMML matrix element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processMatrix(element, parent) {
+function processMatrix(element: XMLElement, parent: XMLElement): void {
     const mcjc = getAttr(element, "m:mPr/m:mcs/m:mc/m:mcPr/m:mcJc", "m:val")
 
-    const attrs = {}
+    const attrs: Record<string, string> = {}
     if (mcjc && mcjc.toLowerCase() !== "center") {
         attrs.columnalign = mcjc.toLowerCase()
     }
 
     const mtable = createMathElement("mtable", attrs, parent)
 
-    element.queryAll("m:mr").forEach(mr => {
+    element.queryAll("m:mr").forEach((mr: any) => {
         const mtr = createMathElement("mtr", {}, mtable)
 
-        mr.queryAll("m:e").forEach(me => {
+        mr.queryAll("m:e").forEach((me: any) => {
             const mtd = createMathElement("mtd", {}, mtr)
             processElement(me, mtd)
         })
@@ -396,10 +375,8 @@ function processMatrix(element, parent) {
 
 /**
  * Process a radical element
- * @param {XMLElement} element - The OMML radical element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processRadical(element, parent) {
+function processRadical(element: XMLElement, parent: XMLElement): void {
     const degHide = forceFalse(
         getAttr(element, "m:radPr/m:degHide", "m:val") || "false"
     )
@@ -429,10 +406,8 @@ function processRadical(element, parent) {
 
 /**
  * Process an n-ary operator element
- * @param {XMLElement} element - The OMML nary element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processNary(element, parent) {
+function processNary(element: XMLElement, parent: XMLElement): void {
     const subHide = forceFalse(
         getAttr(element, "m:naryPr/m:subHide", "m:val") || "false"
     )
@@ -508,15 +483,13 @@ function processNary(element, parent) {
 
 /**
  * Process a delimiter element
- * @param {XMLElement} element - The OMML delimiter element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processDelimiter(element, parent) {
+function processDelimiter(element: XMLElement, parent: XMLElement): void {
     const begChr = getAttr(element, "m:dPr/m:begChr", "m:val")
     const endChr = getAttr(element, "m:dPr/m:endChr", "m:val")
     const sepChr = getAttr(element, "m:dPr/m:sepChr", "m:val") || "|"
 
-    const attr = {}
+    const attr: Record<string, string> = {}
     if (begChr !== undefined && begChr !== "(") {
         attr.open = begChr
     }
@@ -529,7 +502,7 @@ function processDelimiter(element, parent) {
 
     const mfenced = createMathElement("mfenced", attr, parent)
 
-    element.queryAll("m:e").forEach(me => {
+    element.queryAll("m:e").forEach((me: any) => {
         const row = createMathElement("mrow", {}, mfenced)
         processElement(me, row)
     })
@@ -537,13 +510,11 @@ function processDelimiter(element, parent) {
 
 /**
  * Process an equation array element
- * @param {XMLElement} element - The OMML eqArr element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processEqArr(element, parent) {
+function processEqArr(element: XMLElement, parent: XMLElement): void {
     const mtable = createMathElement("mtable", {}, parent)
 
-    element.queryAll("m:e").forEach(me => {
+    element.queryAll("m:e").forEach((me: any) => {
         const mtr = createMathElement("mtr", {}, mtable)
         const mtd = createMathElement("mtd", {}, mtr)
 
@@ -557,21 +528,19 @@ function processEqArr(element, parent) {
 
         const firstChild = me.children[0]
         if (firstChild) {
-            createEqArrRow(outer, element, firstChild, 1)
+            createEqArrRow(outer, element, firstChild as XMLElement, 1)
         }
     })
 }
 
 /**
  * Process a function element
- * @param {XMLElement} element - The OMML function element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processFunction(element, parent) {
+function processFunction(element: XMLElement, parent: XMLElement): void {
     const outer = createMathElement("mrow", {}, parent)
     const row1 = createMathElement("mrow", {}, outer)
 
-    element.queryAll("m:fName").forEach(fn => {
+    element.queryAll("m:fName").forEach((fn: any) => {
         processElement(fn, row1)
     })
 
@@ -587,10 +556,8 @@ function processFunction(element, parent) {
 
 /**
  * Process an accent element
- * @param {XMLElement} element - The OMML accent element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processAccent(element, parent) {
+function processAccent(element: XMLElement, parent: XMLElement): void {
     const mover = createMathElement("mover", {accent: "true"}, parent)
     const row = createMathElement("mrow", {}, mover)
 
@@ -599,10 +566,9 @@ function processAccent(element, parent) {
         processElement(e, row)
     }
 
-    const acc = (getAttr(element, "m:accPr/m:chr", "m:val") || "\u0302").substr(
-        0,
-        1
-    )
+    const acc = (
+        getAttr(element, "m:accPr/m:chr", "m:val") || "\u0302"
+    ).substr(0, 1)
     const nonComb = toNonCombining(acc)
 
     if (acc.length === 0) {
@@ -622,10 +588,8 @@ function processAccent(element, parent) {
 
 /**
  * Process a group character element
- * @param {XMLElement} element - The OMML groupChr element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processGroupChar(element, parent) {
+function processGroupChar(element: XMLElement, parent: XMLElement): void {
     const lastGroupChrPr = element.query("m:groupChrPr")
     if (!lastGroupChrPr) {
         return
@@ -637,8 +601,8 @@ function processGroupChar(element, parent) {
     ).toLowerCase()
     const chr = getAttr(lastGroupChrPr, "m:chr", "m:val") || "\u23DF"
 
-    const mkMrow = parent => {
-        const mrow = createMathElement("mrow", {}, parent)
+    const mkMrow = (p: XMLElement) => {
+        const mrow = createMathElement("mrow", {}, p)
         const e = element.query("m:e")
         if (e) {
             processElement(e, mrow)
@@ -646,8 +610,8 @@ function processGroupChar(element, parent) {
         return mrow
     }
 
-    const mkMo = parent => {
-        const mo = createMathElement("mo", {}, parent)
+    const mkMo = (p: XMLElement) => {
+        const mo = createMathElement("mo", {}, p)
         mo.textContent = chr.substr(0, 1)
         return mo
     }
@@ -685,10 +649,8 @@ function processGroupChar(element, parent) {
 
 /**
  * Process a border box element
- * @param {XMLElement} element - The OMML borderBox element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processBorderBox(element, parent) {
+function processBorderBox(element: XMLElement, parent: XMLElement): void {
     const hideTop = forceTrue(
         getAttr(element, "m:borderBoxPr/m:hideTop", "m:val") || "false"
     )
@@ -714,7 +676,7 @@ function processBorderBox(element, parent) {
         getAttr(element, "m:borderBoxPr/m:strikeTLBR", "m:val") || "false"
     )
 
-    let outer
+    let outer: XMLElement
 
     if (
         hideTop &&
@@ -749,10 +711,8 @@ function processBorderBox(element, parent) {
 
 /**
  * Process a bar element
- * @param {XMLElement} element - The OMML bar element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processBar(element, parent) {
+function processBar(element: XMLElement, parent: XMLElement): void {
     const pos = (getAttr(element, "m:barPr/m:pos", "m:val") || "").toLowerCase()
 
     if (pos === "top") {
@@ -786,10 +746,8 @@ function processBar(element, parent) {
 
 /**
  * Process a phantom element
- * @param {XMLElement} element - The OMML phantom element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processPhantom(element, parent) {
+function processPhantom(element: XMLElement, parent: XMLElement): void {
     const zeroWid = forceFalse(
         getAttr(element, "m:phantPr/m:zeroWid", "m:val") || "false"
     )
@@ -803,7 +761,7 @@ function processPhantom(element, parent) {
         getAttr(element, "m:phantPr/m:show", "m:val") || "false"
     )
 
-    let container
+    let container: XMLElement
 
     if (showVal) {
         container = createMathElement(
@@ -831,10 +789,8 @@ function processPhantom(element, parent) {
 
 /**
  * Process an argument element
- * @param {XMLElement} element - The OMML argument element
- * @param {XMLElement} parent - The parent MathML element
  */
-function processArgument(element, parent) {
+function processArgument(element: XMLElement, parent: XMLElement): void {
     const scriptlevel = getAttr(element, "m:argPr/m:scrLvl", "m:val")
 
     if (!scriptlevel) {
@@ -847,18 +803,18 @@ function processArgument(element, parent) {
 
 /**
  * Get attribute value from an element using a simplified XPath-like path
- * @param {XMLElement} element - The element to query
- * @param {string} path - The simplified path to the attribute
- * @param {string} attrName - The attribute name
- * @return {string} The attribute value or empty string
  */
-function getAttr(element, path, attrName) {
+function getAttr(
+    element: XMLElement | null | undefined,
+    path: string,
+    attrName: string
+): string {
     if (!element) {
         return ""
     }
 
     const parts = path.split("/")
-    let current = element
+    let current: XMLElement | null = element
 
     for (let i = 0; i < parts.length; i++) {
         if (!current) {
@@ -885,15 +841,16 @@ function getAttr(element, path, attrName) {
         }
     }
 
-    return current ? current.getAttribute(attrName) || "" : ""
+    return current ? String(current.getAttribute(attrName) || "") : ""
 }
 
 /**
  * Output a script element, or "none" if not provided
- * @param {XMLElement} parent - The parent element
- * @param {XMLElement} element - The script element to output
  */
-function outputScript(parent, element) {
+function outputScript(
+    parent: XMLElement,
+    element: XMLElement | null | undefined
+): void {
     if (element) {
         const row = createMathElement("mrow", {}, parent)
         processElement(element, row)
@@ -904,11 +861,12 @@ function outputScript(parent, element) {
 
 /**
  * Output an n-ary operator
- * @param {XMLElement} element - The OMML nary element
- * @param {XMLElement} parent - The parent MathML element
- * @param {boolean} grow - Whether the operator should stretch
  */
-function outputNAryMO(element, parent, grow = false) {
+function outputNAryMO(
+    element: XMLElement,
+    parent: XMLElement,
+    grow: any = false
+): void {
     const mo = createMathElement(
         "mo",
         {stretchy: grow ? "true" : "false"},
@@ -920,12 +878,13 @@ function outputNAryMO(element, parent, grow = false) {
 
 /**
  * Create an equation array row
- * @param {XMLElement} parent - The parent MathML element
- * @param {XMLElement} src - The source OMML element
- * @param {XMLElement} cur - The current OMML element
- * @param {number} align - Alignment indicator
  */
-function createEqArrRow(parent, src, cur, align) {
+function createEqArrRow(
+    parent: XMLElement,
+    src: XMLElement,
+    cur: XMLElement | null | undefined,
+    align: number
+): void {
     if (!cur) {
         return
     }
@@ -933,7 +892,7 @@ function createEqArrRow(parent, src, cur, align) {
     if (cur.tagName === "m:r") {
         const allMt = cur
             .queryAll("m:t")
-            .map(t => t.textContent)
+            .map((t: any) => t.textContent)
             .join("")
         const nor = forceFalse(getAttr(cur, "m:rPr/m:nor", "m:val") || "false")
 
@@ -951,12 +910,13 @@ function createEqArrRow(parent, src, cur, align) {
     // Get the next sibling if available
     const siblings = cur.parentElement ? cur.parentElement.children : []
     const index = siblings.indexOf(cur)
-    const nextSibling = index < siblings.length - 1 ? siblings[index + 1] : null
+    const nextSibling =
+        index < siblings.length - 1 ? (siblings[index + 1] as XMLElement) : null
 
     if (nextSibling) {
         const allMt = cur
             .queryAll("m:t")
-            .map(t => t.textContent)
+            .map((t: any) => t.textContent)
             .join("")
         const amp = countAmp(allMt)
         createEqArrRow(parent, src, nextSibling, (align + (amp % 2)) % 2)
@@ -965,10 +925,23 @@ function createEqArrRow(parent, src, cur, align) {
 
 /**
  * Parse equation array run text
- * @param {XMLElement} parent - The parent MathML element
- * @param {Object} options - Parsing options
  */
-function parseEqArrMr(parent, {toParse = "", scr, sty, nor, align}) {
+function parseEqArrMr(
+    parent: XMLElement,
+    {
+        toParse = "",
+        scr,
+        sty,
+        nor,
+        align
+    }: {
+        toParse?: string
+        scr?: string
+        sty?: string
+        nor?: boolean
+        align?: number
+    }
+): void {
     if (!toParse.length) {
         return
     }
@@ -977,7 +950,7 @@ function parseEqArrMr(parent, {toParse = "", scr, sty, nor, align}) {
         createMathElement(align ? "malignmark" : "maligngroup", {}, parent)
         parseEqArrMr(parent, {
             toParse: toParse.substr(1),
-            align: !align,
+            align: align ? 0 : 1,
             scr,
             sty,
             nor
@@ -1067,11 +1040,22 @@ function parseEqArrMr(parent, {toParse = "", scr, sty, nor, align}) {
 
 /**
  * Parse math text
- * @param {XMLElement} ctx - The context OMML element
- * @param {XMLElement} parent - The parent MathML element
- * @param {Object} options - Parsing options
  */
-function parseMT(ctx, parent, {toParse = "", scr, sty, nor}) {
+function parseMT(
+    ctx: XMLElement,
+    parent: XMLElement,
+    {
+        toParse = "",
+        scr,
+        sty,
+        nor
+    }: {
+        toParse?: string
+        scr?: string
+        sty?: string
+        nor?: boolean
+    }
+): void {
     if (!toParse.length) {
         return
     }
@@ -1154,11 +1138,8 @@ function parseMT(ctx, parent, {toParse = "", scr, sty, nor}) {
 
 /**
  * Find the index of a regex match in a string
- * @param {string} str - The string to search
- * @param {RegExp} rx - The regex to match
- * @return {number} The match index + 1, or 0 if no match
  */
-function rxIndexOf(str, rx) {
+function rxIndexOf(str: string, rx: RegExp): number {
     const re = rx.exec(str)
     if (!re) {
         return 0
@@ -1168,10 +1149,8 @@ function rxIndexOf(str, rx) {
 
 /**
  * Get the start of a number in a string
- * @param {string} str - The string to check
- * @return {string} The number at the start of the string
  */
-function numStart(str) {
+function numStart(str: string): string {
     if (!str) {
         return ""
     }
@@ -1181,20 +1160,16 @@ function numStart(str) {
 
 /**
  * Count ampersands in a string
- * @param {string} str - The string to check
- * @return {number} The number of ampersands
  */
-function countAmp(str) {
+function countAmp(str: string): number {
     return ((str || "").match(/&/g) || []).length
 }
 
 /**
  * Convert a combining character to its non-combining equivalent
- * @param {string} ch - The character to convert
- * @return {string} The non-combining equivalent
  */
-function toNonCombining(ch) {
-    const combiMap = {
+function toNonCombining(ch: string): string {
+    const combiMap: Record<string, string> = {
         "\u0306": "\u02D8", // breve
         "\u032e": "\u02D8", // breve below
         "\u0312": "\u00B8", // cedilla
@@ -1226,16 +1201,15 @@ function toNonCombining(ch) {
 
 /**
  * Create MathML token attributes based on token settings
- * @param {Object} options - Token options
- * @return {Object} Attribute object
  */
-function tokenAttributes({scr, sty, nor, charToPrint = 0, tokenType}) {
-    const attr = {}
+function tokenAttributes(options: any): Record<string, string> {
+    const {scr, sty, nor, charToPrint = 0, tokenType} = options
+    const attr: Record<string, string> = {}
 
     if (nor) {
         attr.mathvariant = "normal"
     } else {
-        let mathvariant
+        let mathvariant: string | undefined
         const fontweight = sty === "b" || sty === "bi" ? "bold" : "normal"
         const fontstyle = sty === "b" || sty === "p" ? "normal" : "italic"
 
@@ -1311,8 +1285,6 @@ function tokenAttributes({scr, sty, nor, charToPrint = 0, tokenType}) {
 
 /**
  * Create menclose notation attribute value
- * @param {Object} options - Notation options
- * @return {Object} The notation attributes
  */
 function createMEnclodeNotation({
     hideTop,
@@ -1323,8 +1295,17 @@ function createMEnclodeNotation({
     strikeV,
     strikeBLTR,
     strikeTLBR
-}) {
-    const notation = []
+}: {
+    hideTop: boolean
+    hideBot: boolean
+    hideLeft: boolean
+    hideRight: boolean
+    strikeH: boolean
+    strikeV: boolean
+    strikeBLTR: boolean
+    strikeTLBR: boolean
+}): {notation: string} {
+    const notation: string[] = []
 
     if (!hideTop && !hideBot && !hideLeft && !hideRight) {
         notation.push("box")
@@ -1361,11 +1342,17 @@ function createMEnclodeNotation({
 
 /**
  * Create mpadded attributes
- * @param {Object} options - Padding options
- * @return {Object} The padding attributes
  */
-function createMPaddedAttr({zeroWid, zeroAsc, zeroDesc}) {
-    const attr = {}
+function createMPaddedAttr({
+    zeroWid,
+    zeroAsc,
+    zeroDesc
+}: {
+    zeroWid: boolean
+    zeroAsc: boolean
+    zeroDesc: boolean
+}): Record<string, string> {
+    const attr: Record<string, string> = {}
 
     if (zeroWid) {
         attr.width = "0in"
@@ -1382,10 +1369,8 @@ function createMPaddedAttr({zeroWid, zeroAsc, zeroDesc}) {
 
 /**
  * Get fraction properties
- * @param {string} type - Fraction type
- * @return {Object} Fraction attributes
  */
-function getFracProps(type) {
+function getFracProps(type: string): Record<string, string> {
     if (type === "skw" || type === "lin") {
         return {bevelled: "true"}
     }
@@ -1397,10 +1382,8 @@ function getFracProps(type) {
 
 /**
  * Replace spaces with non-breaking spaces
- * @param {string} str - The string to process
- * @return {string} String with non-breaking spaces
  */
-function nbsp(str) {
+function nbsp(str: string): string {
     if (!str) {
         return ""
     }
@@ -1409,28 +1392,25 @@ function nbsp(str) {
 
 /**
  * Parse a boolean value
- * @param {string} str - The string to parse
- * @return {boolean|undefined} The parsed boolean or undefined
  */
-function tf(str) {
+function tf(str: unknown): boolean | undefined {
     if (str == null) {
         return
     }
-    str = str.toLowerCase()
-    if (str === "on" || str === "1" || str === "true") {
+    const lower = String(str).toLowerCase()
+    if (lower === "on" || lower === "1" || lower === "true") {
         return true
     }
-    if (str === "off" || str === "0" || str === "false") {
+    if (lower === "off" || lower === "0" || lower === "false") {
         return false
     }
+    return undefined
 }
 
 /**
  * Force a value to be true unless explicitly false
- * @param {string} str - The string to parse
- * @return {boolean} True unless the string is explicitly false
  */
-function forceFalse(str) {
+function forceFalse(str: unknown): boolean {
     const res = tf(str)
     if (res === false) {
         return false
@@ -1440,9 +1420,7 @@ function forceFalse(str) {
 
 /**
  * Force a value to be false unless explicitly true
- * @param {string} str - The string to parse
- * @return {boolean} False unless the string is explicitly true
  */
-function forceTrue(str) {
+function forceTrue(str: unknown): boolean {
     return tf(str) || false
 }

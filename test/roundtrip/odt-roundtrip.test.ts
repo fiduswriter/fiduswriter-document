@@ -44,6 +44,9 @@ jest.unstable_mockModule("fwtoolkit", () => ({
     postJson: async (_url: string, _data: unknown) => ({json: {}}),
     getJson: async (_url: string) => ({}),
     convertDataURIToBlob: (_dataURI: string) => new Blob(),
+    gettext: (str: string) => str,
+    interpolate: (str: string, args: Array<string | number>) =>
+        str.replace(/%s/g, () => String(args.shift())),
     noSpaceTmp: () => "tmp",
     longFilePath: (path: string, filename: string) => `${path}${filename}`
 }))
