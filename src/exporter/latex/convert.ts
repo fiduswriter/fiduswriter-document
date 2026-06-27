@@ -702,7 +702,7 @@ export class LatexExporterConvert {
                     ) {
                         columns = node.content[1].content[0].content.reduce(
                             (columns: number, node: any) =>
-                                columns + node.attrs.colspan,
+                                columns + (node.attrs?.colspan || 1),
                             0
                         )
                     }

@@ -39,6 +39,7 @@ export class EpubExporter extends HTMLExporter {
         })
         // Overriden properties
         this.documentFileName = "document.xhtml"
+        this.contentFileName = "document.xhtml"
         this.fileEnding = "epub"
         this.mimeType = "application/epub+zip"
         this.lang = doc.settings.language || "en-US"

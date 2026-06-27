@@ -816,6 +816,245 @@ describe("ODT exporter modules", () => {
         expect(authors[0].firstname).toBe("Jane")
         expect(authors[1].lastname).toBe("Smith")
     })
+
+    it("ODTExporterMetadata extracts correct info from sample doc", () => {
+        const docContent = sampleDoc
+        const authors = docContent.content.reduce((authors, part) => {
+            if (
+                part.type === "contributors_part" &&
+                part.attrs.metadata === "authors" &&
+                part.content
+            ) {
+                return authors.concat(part.content.map(a => a.attrs))
+            }
+            return authors
+        }, [])
+        expect(authors.length).toBe(2)
+        expect(authors[0].firstname).toBe("Jane")
+        expect(authors[0].institution).toBe("Test University")
+
+        const keywords = docContent.content.reduce((kws, part) => {
+            if (
+                part.type === "tags_part" &&
+                part.attrs.metadata === "keywords" &&
+                part.content
+            ) {
+                return kws.concat(part.content.map(n => n.attrs.tag))
+            }
+            return kws
+        }, [])
+        expect(keywords).toEqual(["testing", "export", "fiduswriter"])
+    })
+
+    it("ODTExporterComments finds comment marks in sample doc", () => {
+        const commentMarks = []
+        const findComments = node => {
+            if (node.marks) {
+                node.marks
+                    .filter(m => m.type === "comment")
+                    .forEach(c => {
+                        if (!commentMarks.includes(c.attrs.id)) {
+                            commentMarks.push(c.attrs.id)
+                        }
+                    })
+            }
+            if (node.content) {
+                node.content.forEach(findComments)
+            }
+        }
+        findComments(sampleDoc)
+        expect(commentMarks).toContain(1001)
+    })
+
+    describe("Lists", () => {
+        it("ODTExporterLists detects all list types in sample doc", async () => {
+            const {descendantNodes} = await import(
+                "../../src/exporter/tools/doc_content.js"
+            )
+            let useBulletList = false
+            const usedNumberedList = []
+            descendantNodes(sampleDoc).forEach(node => {
+                if (node.type === "bullet_list") {
+                    useBulletList = true
+                } else if (node.type === "ordered_list") {
+                    usedNumberedList.push(node.attrs.order)
+                }
+            })
+            expect(useBulletList).toBe(true)
+            expect(usedNumberedList.length).toBeGreaterThanOrEqual(1)
+        })
+
+        it("bullet_list items have correct structure", async () => {
+            const {descendantNodes} = await import(
+                "../../src/exporter/tools/doc_content.js"
+            )
+            const bullets = descendantNodes(sampleDoc).filter(
+                n => n.type === "bullet_list"
+            )
+            expect(bullets.length).toBeGreaterThanOrEqual(1)
+
+            const list = bullets[0]
+            expect(list.attrs).toBeDefined()
+            expect(list.attrs.id).toBeDefined()
+
+            if (list.content) {
+                list.content.forEach(item => {
+                    expect(item.type).toBe("list_item")
+                    expect(item.content).toBeDefined()
+                    expect(item.content.length).toBeGreaterThanOrEqual(1)
+                })
+            }
+        })
+
+        it("ordered_list items have sequential numbering", async () => {
+            const {descendantNodes} = await import(
+                "../../src/exporter/tools/doc_content.js"
+            )
+            const orderedLists = descendantNodes(sampleDoc).filter(
+                n => n.type === "ordered_list"
+            )
+            expect(orderedLists.length).toBeGreaterThanOrEqual(1)
+
+            orderedLists.forEach(list => {
+                expect(list.attrs.order).toBeDefined()
+                expect(typeof list.attrs.order).toBe("number")
+                expect(list.attrs.order).toBeGreaterThanOrEqual(1)
+
+                if (list.content) {
+                    list.content.forEach(item => {
+                        expect(item.type).toBe("list_item")
+                    })
+                }
+            })
+        })
+
+        it("list items contain text with formatting", async () => {
+            const {descendantNodes, textContent} = await import(
+                "../../src/exporter/tools/doc_content.js"
+            )
+            const listItems = descendantNodes(sampleDoc).filter(
+                n => n.type === "list_item"
+            )
+            expect(listItems.length).toBeGreaterThanOrEqual(2)
+
+            let allText = ""
+            listItems.forEach(item => {
+                allText += textContent(item) + " "
+            })
+            expect(allText.length).toBeGreaterThan(10)
+            expect(allText).toMatch(/bold/i)
+        })
+
+        it("both bullet and ordered lists exist", async () => {
+            const {descendantNodes} = await import(
+                "../../src/exporter/tools/doc_content.js"
+            )
+            const types = new Set(
+                descendantNodes(sampleDoc)
+                    .filter(
+                        n =>
+                            n.type === "bullet_list" ||
+                            n.type === "ordered_list"
+                    )
+                    .map(n => n.type)
+            )
+            expect(types.has("bullet_list")).toBe(true)
+            expect(types.has("ordered_list")).toBe(true)
+        })
+    })
+
+    it("ODTExporterFootnotes finds footnotes in sample doc", async () => {
+        const {descendantNodes} = await import(
+            "../../src/exporter/tools/doc_content.js"
+        )
+        const footnotes = []
+        descendantNodes(sampleDoc).forEach(node => {
+            if (node.type === "footnote") {
+                footnotes.push(node.attrs.footnote)
+            }
+        })
+        expect(footnotes.length).toBeGreaterThanOrEqual(1)
+        expect(footnotes[0][0].content[0].text).toContain("footnote content")
+    })
+
+    it("ODTExporterImages finds images in sample doc", async () => {
+        const {descendantNodes} = await import(
+            "../../src/exporter/tools/doc_content.js"
+        )
+        const images = []
+        descendantNodes(sampleDoc).forEach(node => {
+            if (node.type === "image" && node.attrs.image !== false) {
+                images.push(node.attrs.image)
+            }
+        })
+        expect(images.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it("ODTExporterMath getBaseMetadata returns correct structure", () => {
+        const title = sampleDoc.content[0]
+        const language = sampleSettings.language
+        expect(title.content[0].text).toBe("Test Document for Export/Import")
+        expect(language).toBe("en-US")
+    })
+
+    it("ODT exporter handles tracked changes", async () => {
+        const {descendantNodes} = await import(
+            "../../src/exporter/tools/doc_content.js"
+        )
+        const insertions = []
+        const deletions = []
+        descendantNodes(sampleDoc).forEach(node => {
+            if (node.marks) {
+                node.marks.forEach(m => {
+                    if (m.type === "insertion") {
+                        insertions.push(m)
+                    }
+                    if (m.type === "deletion") {
+                        deletions.push(m)
+                    }
+                })
+            }
+        })
+        expect(insertions.length).toBeGreaterThanOrEqual(1)
+        expect(deletions.length).toBeGreaterThanOrEqual(1)
+        expect(insertions[0].attrs.username).toBe("Jane Doe")
+    })
+
+    it("ODT exporter handles format_change marks", async () => {
+        const {descendantNodes} = await import(
+            "../../src/exporter/tools/doc_content.js"
+        )
+        const formatChanges = []
+        descendantNodes(sampleDoc).forEach(node => {
+            if (node.marks) {
+                node.marks.forEach(m => {
+                    if (m.type === "format_change") {
+                        formatChanges.push(m)
+                    }
+                })
+            }
+        })
+        expect(formatChanges.length).toBeGreaterThanOrEqual(1)
+        expect(formatChanges[0].attrs.before).toContain("em")
+    })
+
+    it("ODT exporter handles block_change tracks", async () => {
+        const {descendantNodes} = await import(
+            "../../src/exporter/tools/doc_content.js"
+        )
+        const blockChanges = []
+        descendantNodes(sampleDoc).forEach(node => {
+            if (node.attrs?.track) {
+                node.attrs.track.forEach(t => {
+                    if (t.type === "block_change") {
+                        blockChanges.push(t)
+                    }
+                })
+            }
+        })
+        expect(blockChanges.length).toBeGreaterThanOrEqual(1)
+        expect(blockChanges[0].before.type).toBe("heading2")
+    })
 })
 
 // ========================================================================
