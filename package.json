@@ -1,6 +1,6 @@
 {
   "name": "@fiduswriter/document",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Fidus Writer document schema, importers and exporters",
   "repository": {
     "type": "git",
@@ -36,7 +36,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js"
   },
   "dependencies": {
-    "fwtoolkit": "^0.1.0-alpha.7",
+    "fwtoolkit": "^0.1.1",
     "biblatex-csl-converter": "^3.0.0",
     "downloadjs": "^1.4.7",
     "fast-deep-equal": "^3.1.3",
