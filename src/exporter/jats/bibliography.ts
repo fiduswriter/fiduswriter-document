@@ -45,11 +45,26 @@ const PUBLICATION_TYPES: Record<string, string> = {
 }
 
 interface NameLike {
-    literal?: string
-    family?: string
-    given?: string
-    prefix?: string
-    suffix?: string
+    literal?: string | FidusNode[]
+    family?: string | FidusNode[]
+    given?: string | FidusNode[]
+    prefix?: string | FidusNode[]
+    suffix?: string | FidusNode[]
+}
+
+/**
+ * Serialize a bibliographic field value. CSL fields may be plain strings
+ * or rich-text node arrays, so we handle both.
+ */
+function serializeField(value: unknown): string {
+    if (Array.isArray(value)) {
+        // Array of Fidus nodes (rich text)
+        return convertTexts(value as FidusNode[])
+    }
+    if (typeof value === "string") {
+        return escapeText(value)
+    }
+    return escapeText(String(value || ""))
 }
 
 export function jatsBib(bib: BibDBEntry, id: number): string {
@@ -70,14 +85,18 @@ export function jatsBib(bib: BibDBEntry, id: number): string {
             .map((author: unknown) => {
                 const a = author as NameLike
                 if (a.literal) {
-                    return `<collab>${convertTexts((a.literal) as unknown as FidusNode[])}</collab>`
+                    return `<collab>${serializeField(a.literal)}</collab>`
                 }
-                let nameStart = `<name><surname>${convertTexts((a.family || "") as unknown as FidusNode[])}</surname> <given-names>${convertTexts((a.given || "") as unknown as FidusNode[])}</given-names>`
+                let nameStart = `<name><surname>${serializeField(
+                    a.family || ""
+                )}</surname> <given-names>${serializeField(
+                    a.given || ""
+                )}</given-names>`
                 if (a.prefix && a.prefix.length) {
-                    nameStart += ` <prefix>${convertTexts((a.prefix) as unknown as FidusNode[])}</prefix>`
+                    nameStart += ` <prefix>${serializeField(a.prefix)}</prefix>`
                 }
                 if (a.suffix && a.suffix.length) {
-                    nameStart += ` <suffix>${convertTexts((a.suffix) as unknown as FidusNode[])}</suffix>`
+                    nameStart += ` <suffix>${serializeField(a.suffix)}</suffix>`
                 }
                 const nameEnd = "</name>"
                 return nameStart + nameEnd
@@ -92,10 +111,12 @@ export function jatsBib(bib: BibDBEntry, id: number): string {
             fields.booktitle ||
             fields.journaltitle
         ) {
-            start += `<source>${convertTexts((String(fields.shortjournal || fields.booktitle || fields.journaltitle) as unknown as FidusNode[]))}</source>`
-            start += `<article-title>${convertTexts((String(fields.title) as unknown as FidusNode[]))}</article-title>`
+            start += `<source>${serializeField(
+                fields.shortjournal || fields.booktitle || fields.journaltitle
+            )}</source>`
+            start += `<article-title>${serializeField(fields.title)}</article-title>`
         } else {
-            start += `<source>${convertTexts((String(fields.title) as unknown as FidusNode[]))}</source>`
+            start += `<source>${serializeField(fields.title)}</source>`
         }
     }
 
@@ -105,15 +126,19 @@ export function jatsBib(bib: BibDBEntry, id: number): string {
             .map((editor: unknown) => {
                 const e = editor as NameLike
                 if (e.literal) {
-                    return `<collab>${convertTexts((e.literal) as unknown as FidusNode[])}</collab>`
+                    return `<collab>${serializeField(e.literal)}</collab>`
                 }
-                let nameStart = `<name><surname>${convertTexts((e.family || "") as unknown as FidusNode[])}</surname> <given-names>${convertTexts((e.given || "") as unknown as FidusNode[])}</given-names>`
+                let nameStart = `<name><surname>${serializeField(
+                    e.family || ""
+                )}</surname> <given-names>${serializeField(
+                    e.given || ""
+                )}</given-names>`
                 const nameEnd = "</name>"
                 if (e.prefix && e.prefix.length) {
-                    nameStart += ` <prefix>${convertTexts((e.prefix) as unknown as FidusNode[])}</prefix>`
+                    nameStart += ` <prefix>${serializeField(e.prefix)}</prefix>`
                 }
                 if (e.suffix && e.suffix.length) {
-                    nameStart += ` <suffix>${convertTexts((e.suffix) as unknown as FidusNode[])}</suffix>`
+                    nameStart += ` <suffix>${serializeField(e.suffix)}</suffix>`
                 }
                 return nameStart + nameEnd
             })
@@ -121,21 +146,29 @@ export function jatsBib(bib: BibDBEntry, id: number): string {
     }
 
     // publisher
-    if (fields.publisher && Array.isArray(fields.publisher) && fields.publisher.length) {
+    if (
+        fields.publisher &&
+        Array.isArray(fields.publisher) &&
+        fields.publisher.length
+    ) {
         start += fields.publisher
             .map(
                 publisher =>
-                    `<publisher-name>${convertTexts((String(publisher) as unknown as FidusNode[]))}</publisher-name>`
+                    `<publisher-name>${serializeField(publisher)}</publisher-name>`
             )
             .join("")
     }
 
     // location
-    if (fields.location && Array.isArray(fields.location) && fields.location.length) {
+    if (
+        fields.location &&
+        Array.isArray(fields.location) &&
+        fields.location.length
+    ) {
         start += fields.location
             .map(
                 location =>
-                    `<publisher-loc>${convertTexts((String(location) as unknown as FidusNode[]))}</publisher-loc>`
+                    `<publisher-loc>${serializeField(location)}</publisher-loc>`
             )
             .join("")
     }
@@ -153,23 +186,27 @@ export function jatsBib(bib: BibDBEntry, id: number): string {
 
     // volume
     if (fields.volume && String(fields.volume).length) {
-        start += `<volume>${convertTexts((String(fields.volume) as unknown as FidusNode[]))}</volume>`
+        start += `<volume>${serializeField(fields.volume)}</volume>`
     }
 
     // issue
     if (fields.issue && String(fields.issue).length) {
-        start += `<issue>${convertTexts((String(fields.issue) as unknown as FidusNode[]))}</issue>`
+        start += `<issue>${serializeField(fields.issue)}</issue>`
     }
 
     // pages
     if (fields.pages && Array.isArray(fields.pages) && fields.pages.length) {
         const pages = fields.pages as Array<string[]>
-        start += `<fpage>${convertTexts((pages[0][0]) as unknown as FidusNode[])}</fpage>`
+        start += `<fpage>${serializeField(pages[0][0])}</fpage>`
         const lastPageGroup = pages.slice(-1)[0]
-        start += `<lpage>${convertTexts((lastPageGroup.slice(-1)[0]) as unknown as FidusNode[])}</lpage>`
+        start += `<lpage>${serializeField(
+            lastPageGroup.slice(-1)[0]
+        )}</lpage>`
         if (pages.length > 1) {
             start += `<page-range>${pages
-                .map(pageGroup => pageGroup.map(page => convertTexts((page) as unknown as FidusNode[])).join("-"))
+                .map(pageGroup =>
+                    pageGroup.map(page => serializeField(page)).join("-")
+                )
                 .join(", ")}</page-range>`
         }
     }
