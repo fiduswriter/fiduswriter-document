@@ -1,6 +1,6 @@
 {
   "name": "@fiduswriter/document",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.7",
   "description": "Fidus Writer document schema, importers and exporters",
   "repository": {
     "type": "git",
@@ -24,9 +24,29 @@
       "types": "./dist/schema/*.d.ts",
       "default": "./dist/schema/*.js"
     },
+    "./importer/native": {
+      "types": "./dist/importer/native/index.d.ts",
+      "default": "./dist/importer/native/index.js"
+    },
+    "./importer/docx": {
+      "types": "./dist/importer/docx/index.d.ts",
+      "default": "./dist/importer/docx/index.js"
+    },
+    "./importer/odt": {
+      "types": "./dist/importer/odt/index.d.ts",
+      "default": "./dist/importer/odt/index.js"
+    },
+    "./importer/pandoc": {
+      "types": "./dist/importer/pandoc/index.d.ts",
+      "default": "./dist/importer/pandoc/index.js"
+    },
     "./importer/*": {
       "types": "./dist/importer/*.d.ts",
       "default": "./dist/importer/*.js"
+    },
+    "./exporter/native": {
+      "types": "./dist/exporter/native/index.d.ts",
+      "default": "./dist/exporter/native/index.js"
     },
     "./exporter/*": {
       "types": "./dist/exporter/*.d.ts",
