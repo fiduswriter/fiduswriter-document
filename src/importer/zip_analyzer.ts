@@ -1,25 +1,49 @@
+import type JSZip from "jszip"
+
+interface ZipAnalysis {
+    hasConvertible: boolean
+    format: string | null
+    convertibleFile: {
+        path: string
+        entry: JSZip.JSZipObject
+        fileName: string
+        format: string
+    } | null
+    imageFiles: Array<{path: string; entry: JSZip.JSZipObject}>
+    bibFile: JSZip.JSZipObject | null
+}
+
+interface ZipContents {
+    images: Record<string, Blob>
+    bibliography: string | null
+    mainContent: File | null
+}
+
 export class ZipAnalyzer {
-    constructor(zip, formats = []) {
+    zip: JSZip
+    formats: string[]
+    analysis: ZipAnalysis | null
+
+    constructor(zip: JSZip, formats: string[] = []) {
         this.zip = zip
         this.formats = formats
-
         this.analysis = null
     }
 
-    analyze() {
+    analyze(): ZipAnalysis {
         if (this.analysis) {
             return this.analysis
         }
 
-        let convertibleFile = null
-        const imageFiles = []
-        let bibFile = null
+        let convertibleFile: ZipAnalysis["convertibleFile"] = null
+        const imageFiles: ZipAnalysis["imageFiles"] = []
+        let bibFile: JSZip.JSZipObject | null = null
 
         // Analyze all files in the ZIP
         this.zip.forEach((relativePath, zipEntry) => {
             if (!zipEntry.dir) {
-                const fileName = relativePath.split("/").pop()
-                const extension = fileName.split(".").pop().toLowerCase()
+                const fileName = relativePath.split("/").pop() || ""
+                const extension = fileName.split(".").pop()?.toLowerCase() || ""
 
                 if (extension === "bib") {
                     bibFile = zipEntry
@@ -52,7 +76,9 @@ export class ZipAnalyzer {
 
         this.analysis = {
             hasConvertible: Boolean(convertibleFile),
-            format: convertibleFile ? convertibleFile.format : null,
+            format: convertibleFile
+                ? (convertibleFile as Exclude<ZipAnalysis["convertibleFile"], null>).format
+                : null,
             convertibleFile,
             imageFiles,
             bibFile
@@ -61,29 +87,29 @@ export class ZipAnalyzer {
         return this.analysis
     }
 
-    async getContents() {
+    async getContents(): Promise<ZipContents> {
         if (!this.analysis) {
-            await this.analyze()
+            this.analyze()
         }
 
-        const contents = {
+        const contents: ZipContents = {
             images: {},
             bibliography: null,
             mainContent: null
         }
 
         // Load main content file
-        if (this.analysis.hasConvertible) {
+        if (this.analysis!.hasConvertible && this.analysis!.convertibleFile) {
             const mainBlob =
-                await this.analysis.convertibleFile.entry.async("blob")
+                await this.analysis!.convertibleFile.entry.async("blob")
             contents.mainContent = new File(
                 [mainBlob],
-                this.analysis.convertibleFile.fileName
+                this.analysis!.convertibleFile.fileName
             )
         }
 
         // Load images
-        const imagePromises = this.analysis.imageFiles.map(
+        const imagePromises = this.analysis!.imageFiles.map(
             async ({path, entry}) => {
                 const blob = await entry.async("blob")
                 contents.images[path] = blob
@@ -93,8 +119,8 @@ export class ZipAnalyzer {
         await Promise.all(imagePromises)
 
         // Load bibliography if present
-        if (this.analysis.bibFile) {
-            contents.bibliography = await this.analysis.bibFile.async("text")
+        if (this.analysis!.bibFile) {
+            contents.bibliography = await this.analysis!.bibFile.async("text")
         }
 
         return contents

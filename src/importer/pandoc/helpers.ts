@@ -1,7 +1,15 @@
-export const applyMarkToNodes = (nodes, markType, attrs = null) => {
-    return nodes.map(node => {
+import type {FidusMark, FidusNode} from "../../types.js"
+
+export const applyMarkToNodes = (
+    nodes: FidusNode[],
+    markType: string,
+    attrs: Record<string, unknown> | null = null
+): FidusNode[] =>
+    nodes.map(node => {
         if (node.type === "text") {
-            const mark = attrs ? {type: markType, attrs} : {type: markType}
+            const mark: FidusMark = attrs
+                ? {type: markType, attrs}
+                : {type: markType}
             return {
                 ...node,
                 marks: [...(node.marks || []), mark]
@@ -9,13 +17,15 @@ export const applyMarkToNodes = (nodes, markType, attrs = null) => {
         }
         return node
     })
-}
 
-export const mergeTextNodes = nodes => {
-    const mergedNodes = []
-    let currentNode = null
+export const mergeTextNodes = (nodes: FidusNode[]): FidusNode[] => {
+    const mergedNodes: FidusNode[] = []
+    let currentNode: FidusNode | null = null
 
-    const areSameMarks = (marks1 = [], marks2 = []) => {
+    const areSameMarks = (
+        marks1: FidusMark[] = [],
+        marks2: FidusMark[] = []
+    ): boolean => {
         if (marks1.length !== marks2.length) {
             return false
         }
@@ -46,7 +56,7 @@ export const mergeTextNodes = nodes => {
                 areSameMarks(currentNode.marks, node.marks)
             ) {
                 // Merge with previous node
-                currentNode.text += node.text
+                currentNode.text = (currentNode.text || "") + (node.text || "")
             } else {
                 // Start new node
                 if (currentNode) {
@@ -70,8 +80,11 @@ export const mergeTextNodes = nodes => {
     return mergedNodes
 }
 
-export const applyAnnotation = (nodes, type) => {
-    return nodes.map(node => ({
+export const applyAnnotation = (
+    nodes: FidusNode[],
+    type: string
+): FidusNode[] =>
+    nodes.map(node => ({
         ...node,
         marks: [
             ...(node.marks || []),
@@ -81,4 +94,3 @@ export const applyAnnotation = (nodes, type) => {
             }
         ]
     }))
-}

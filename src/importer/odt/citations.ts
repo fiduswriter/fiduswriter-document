@@ -1,15 +1,14 @@
 import {OdtCitationsParser} from "biblatex-csl-converter"
+
 import {citationResultToNode} from "../citations.js"
+import type {BibDB, FidusNode} from "../../types.js"
+import type {XMLElement} from "../../exporter/tools/xml.js"
 
 /**
  * Check whether an ODT reference mark name belongs to a bibliography region
  * (Zotero ZOTERO_BIBL, Mendeley CSL_BIBLIOGRAPHY).
- * Uses OdtCitationsParser.referenceMarkBibliography().
- *
- * @param {string} markName - text:name attribute value
- * @returns {boolean}
  */
-export function isOdtBibliographyReferenceMark(markName) {
+export function isOdtBibliographyReferenceMark(markName: string): boolean {
     if (!markName) {
         return false
     }
@@ -19,12 +18,8 @@ export function isOdtBibliographyReferenceMark(markName) {
 /**
  * Check whether a text:section name belongs to a bibliography region
  * (Zotero, JabRef).
- * Uses OdtCitationsParser.sectionBibliography().
- *
- * @param {string} sectionName - text:name attribute value
- * @returns {boolean}
  */
-export function isOdtBibliographySection(sectionName) {
+export function isOdtBibliographySection(sectionName: string): boolean {
     if (!sectionName) {
         return false
     }
@@ -33,12 +28,8 @@ export function isOdtBibliographySection(sectionName) {
 
 /**
  * Check whether an ODT reference mark name belongs to a citation.
- * Uses OdtCitationsParser.referenceMarkCitation() with retrieve=false.
- *
- * @param {string} markName - text:name attribute value
- * @returns {boolean}
  */
-export function isOdtCitationMark(markName) {
+export function isOdtCitationMark(markName: string): boolean {
     if (!markName) {
         return false
     }
@@ -48,14 +39,12 @@ export function isOdtCitationMark(markName) {
 /**
  * Parse a citation from an ODT reference mark name and add any new
  * bibliography entries into `bibliography`.
- *
- * Handles Zotero, Mendeley Desktop (legacy), and JabRef reference marks.
- *
- * @param {string} markName     - text:name attribute of the reference-mark-start
- * @param {Object} bibliography - Fidus Writer bibliography (mutated in place)
- * @returns {Object|null}  ProseMirror citation node or null
  */
-export function parseOdtReferenceMark(markName, bibliography, bibDB) {
+export function parseOdtReferenceMark(
+    markName: string,
+    bibliography: Record<string, unknown>,
+    bibDB: BibDB
+): FidusNode | null {
     if (!markName) {
         return null
     }
@@ -64,18 +53,17 @@ export function parseOdtReferenceMark(markName, bibliography, bibDB) {
         true, // retrieve
         true // retrieveMetadata
     )
-    return citationResultToNode(result, bibliography, bibDB)
+    return citationResultToNode(result as any, bibliography, bibDB)
 }
 
 /**
  * Parse a citation from a LibreOffice native <text:bibliography-mark> element
  * and add any new bibliography entries into `bibliography`.
- *
- * @param {Object} bibMarkNode  - The parsed text:bibliography-mark XMLElement
- * @param {Object} bibliography - Fidus Writer bibliography (mutated in place)
- * @returns {Object|null}  ProseMirror citation node or null
  */
-export function parseOdtBibliographyMark(bibMarkNode, bibliography) {
+export function parseOdtBibliographyMark(
+    bibMarkNode: XMLElement,
+    bibliography: Record<string, unknown>
+): FidusNode | null {
     if (!bibMarkNode) {
         return null
     }
@@ -83,5 +71,5 @@ export function parseOdtBibliographyMark(bibMarkNode, bibliography) {
         bibMarkNode.outerXML,
         true // retrieve
     )
-    return citationResultToNode(result, bibliography)
+    return citationResultToNode(result as any, bibliography)
 }
