@@ -1,6 +1,13 @@
-/** Same functionality as objToNode/nodeToObj in diffDOM.js, but also offers output in XHTML format (obj2Node) and without form support. */
-export const obj2Node = (obj, docType) => {
-    let parser
+import type {NativeDomNode} from "../../types.js"
+
+/** Same functionality as objToNode/nodeToObj in diffDOM.js, but also offers
+ *  output in XHTML format (obj2Node) and without form support.
+ */
+export const obj2Node = (
+    obj: NativeDomNode | undefined,
+    docType?: "xhtml"
+): Node | false => {
+    let parser: Document
     if (obj === undefined) {
         return false
     }
@@ -10,28 +17,28 @@ export const obj2Node = (obj, docType) => {
         parser = document
     }
 
-    function inner(obj, insideSvg) {
-        let node
-        if (obj.hasOwnProperty("t")) {
-            node = parser.createTextNode(obj.t)
-        } else if (obj.hasOwnProperty("co")) {
-            node = parser.createComment(obj.co)
+    function inner(obj: NativeDomNode, insideSvg = false): Node {
+        let node: Node
+        if (Object.prototype.hasOwnProperty.call(obj, "t")) {
+            node = parser.createTextNode(obj.t as string)
+        } else if (Object.prototype.hasOwnProperty.call(obj, "co")) {
+            node = parser.createComment(obj.co as string)
         } else {
             if (obj.nn === "svg" || insideSvg) {
                 node = parser.createElementNS(
                     "http://www.w3.org/2000/svg",
-                    obj.nn
+                    obj.nn as string
                 )
                 insideSvg = true
             } else if (obj.nn === "script") {
                 // Do not allow scripts
                 return parser.createTextNode("")
             } else {
-                node = parser.createElement(obj.nn.toLowerCase())
+                node = parser.createElement((obj.nn as string).toLowerCase())
             }
             if (obj.a) {
                 for (let i = 0; i < obj.a.length; i++) {
-                    node.setAttribute(obj.a[i][0], obj.a[i][1])
+                    ;(node as Element).setAttribute(obj.a[i][0], obj.a[i][1])
                 }
             }
             if (obj.c) {
@@ -45,19 +52,23 @@ export const obj2Node = (obj, docType) => {
     return inner(obj)
 }
 
-export const node2Obj = node => {
-    const obj = {}
+export const node2Obj = (node: Node): NativeDomNode => {
+    const obj: NativeDomNode = {}
 
     if (node.nodeType === 3) {
-        obj.t = node.data
+        obj.t = (node as Text).data
     } else if (node.nodeType === 8) {
-        obj.co = node.data
+        obj.co = (node as Comment).data
     } else {
         obj.nn = node.nodeName
-        if (node.attributes?.length > 0) {
+        const element = node as Element
+        if (element.attributes?.length > 0) {
             obj.a = []
-            for (let i = 0; i < node.attributes.length; i++) {
-                obj.a.push([node.attributes[i].name, node.attributes[i].value])
+            for (let i = 0; i < element.attributes.length; i++) {
+                obj.a.push([
+                    element.attributes[i].name,
+                    element.attributes[i].value
+                ])
             }
         }
         if (node.childNodes?.length > 0) {

@@ -1,4 +1,4 @@
-export const LANGUAGES = [
+export const LANGUAGES: Array<[string, string, string]> = [
     ["af-ZA", gettext("Afrikaans"), "ltr"],
     ["sq-AL", gettext("Albanian"), "ltr"],
     ["ar", gettext("Arabic"), "rtl"],
@@ -51,7 +51,7 @@ export const LANGUAGES = [
     ["uk", gettext("Ukrainian"), "ltr"]
 ]
 
-export const PAPER_SIZES = [
+export const PAPER_SIZES: Array<[string, string]> = [
     /* [Fidus Writer value, CSS value]*/
     ["A4", "A4"],
     ["US Letter", "letter"]
