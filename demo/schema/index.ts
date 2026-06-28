@@ -37,7 +37,7 @@ function renderSpec(name: string, spec: Record<string, unknown>): string {
     return parts.length ? parts.join(" · ") : "no extra spec"
 }
 
-docSchema.nodes.forEach((type, name) => {
+Object.entries(docSchema.nodes).forEach(([name, type]) => {
     const item = document.createElement("div")
     item.className = "schema-item"
     item.innerHTML = `<code>${name}</code><p>${renderSpec(
@@ -47,7 +47,7 @@ docSchema.nodes.forEach((type, name) => {
     nodesEl.appendChild(item)
 })
 
-docSchema.marks.forEach((type, name) => {
+Object.entries(docSchema.marks).forEach(([name, type]) => {
     const item = document.createElement("div")
     item.className = "schema-item"
     item.innerHTML = `<code>${name}</code><p>${renderSpec(

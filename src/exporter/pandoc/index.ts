@@ -26,6 +26,7 @@ export class PandocExporter {
     zipFileName: string
     textFiles: Array<{filename: string; contents: string}>
     httpFiles: Array<{filename: string; url: string}>
+    citations!: PandocExporterCitations
 
     constructor(
         doc: ExportDoc,
@@ -56,6 +57,7 @@ export class PandocExporter {
             this.csl,
             this.docContent
         )
+        this.citations = citations
         const converter = new PandocExporterConvert(
             this,
             this.imageDB,

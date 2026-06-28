@@ -46,7 +46,24 @@ await build({
     },
     define: {
         "process.env.NODE_ENV": '"production"'
-    }
+    },
+    // Mark Node.js built-ins as external so esbuild does not try to bundle
+    // them for the browser.  The create_csl.ts Node.js locale-loader path is
+    // guarded by a `process.versions?.node` check and is never reached at
+    // runtime in the browser, so leaving these as unresolved dynamic imports
+    // is safe.
+    external: [
+        "fs",
+        "fs/promises",
+        "path",
+        "url",
+        "module",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:url",
+        "node:module"
+    ]
 })
 
 console.log("Demo bundles written to", BUILD_DIR)
