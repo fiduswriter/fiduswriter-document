@@ -30,6 +30,27 @@
                 <textarea id="doc-json"></textarea>
             </div>
 
+            <div class="demo-field">
+                <label for="bib-json">Bibliography DB JSON</label>
+                <textarea id="bib-json"></textarea>
+            </div>
+
+            <div class="demo-field">
+                <label for="docx-template">
+                    DOCX template
+                    <span class="demo-field-hint">(leave empty to use the built-in Classic template)</span>
+                </label>
+                <input type="file" id="docx-template" accept=".docx" />
+            </div>
+
+            <div class="demo-field">
+                <label for="odt-template">
+                    ODT template
+                    <span class="demo-field-hint">(leave empty to use the built-in Free template)</span>
+                </label>
+                <input type="file" id="odt-template" accept=".odt" />
+            </div>
+
             <div class="demo-actions">
                 <button id="export-jats" class="fw-button fw-dark">
                     JATS
@@ -45,6 +66,12 @@
                 </button>
                 <button id="export-epub" class="fw-button fw-dark">
                     EPUB
+                </button>
+                <button id="export-docx" class="fw-button fw-dark">
+                    DOCX
+                </button>
+                <button id="export-odt" class="fw-button fw-dark">
+                    ODT
                 </button>
                 <button id="export-native" class="fw-button fw-dark">
                     Native Fidus

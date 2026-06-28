@@ -82,6 +82,12 @@ body {
     font-weight: bold;
 }
 
+.demo-field-hint {
+    font-weight: normal;
+    font-size: 0.875em;
+    color: var(--cs-light-text-secondary, #6c757d);
+}
+
 .demo-field input,
 .demo-field select,
 .demo-field textarea {
