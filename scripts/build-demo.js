@@ -41,7 +41,8 @@ await build({
     loader: {
         ".png": "file",
         ".svg": "file",
-        ".woff2": "file"
+        ".woff2": "file",
+        ".csljson": "json"
     },
     define: {
         "process.env.NODE_ENV": '"production"'

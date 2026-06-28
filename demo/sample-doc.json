@@ -62,7 +62,22 @@
         },
         {
           "type": "text",
-          "text": " text."
+          "text": " text and a citation "
+        },
+        {
+          "type": "citation",
+          "attrs": {
+            "format": "autocite",
+            "references": [
+              {
+                "id": 1
+              }
+            ]
+          }
+        },
+        {
+          "type": "text",
+          "text": "."
         }
       ]
     }

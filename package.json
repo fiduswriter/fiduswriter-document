@@ -104,6 +104,7 @@
     "@types/prosemirror-schema-basic": "^1.0.2",
     "@types/prosemirror-tables": "^0.8.0",
     "@xmldom/xmldom": "^0.9.10",
+    "citeproc-plus": "^0.3.6",
     "happy-dom": "^20.10.6",
     "jest": "^29.7.0",
     "ts-jest": "^29.4.11",
