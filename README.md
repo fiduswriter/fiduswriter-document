@@ -1,5 +1,7 @@
 # @fiduswriter/document
 
+<p align="center"><img src="https://codeberg.org/fiduswriter/fiduswriter-document/raw/branch/main/demo/logo.svg" alt="@fiduswriter/document logo" width="100" height="100"></p>
+
 This package contains the Fidus Writer document schema, importers and exporters.
 
 ## Usage
