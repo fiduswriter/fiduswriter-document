@@ -137,9 +137,25 @@ export async function createCSL(styles: StyleMap = {}): Promise<InstanceType<typ
                 if (!filename) {
                     throw new Error(`Locale "${effectiveName}" not found in citeproc-plus assets`)
                 }
-                const raw = JSON.parse(
-                    await readFile(resolve(assetsDir, filename), "utf8")
-                )
+                const filePath = resolve(assetsDir, filename)
+                const bytes = await readFile(filePath)
+                let text: string
+                // citeproc-plus 1.0.0+ ships locale assets gzip-compressed.
+                if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+                    const {gunzip} = await import("node:zlib")
+                    text = await new Promise<string>((resolveText, reject) => {
+                        gunzip(bytes, (err, buf) => {
+                            if (err) {
+                                reject(err)
+                            } else {
+                                resolveText(buf.toString("utf8"))
+                            }
+                        })
+                    })
+                } else {
+                    text = bytes.toString("utf8")
+                }
+                const raw = JSON.parse(text)
                 localeCache[effectiveName] = expandCslNode(raw)
                 return localeCache[effectiveName]
             }

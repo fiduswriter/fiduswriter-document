@@ -16,14 +16,16 @@ interface ImageDBEntry {
 
 interface ImageDB {
     db: Record<number, ImageDBEntry>
-    mod?: {
-        editor?: {
-            e2ee?: {
-                key?: CryptoKey
-            }
-        }
-    }
     getDB?: () => Promise<unknown>
+}
+
+interface DecryptImage {
+    (imageEntry: ImageDBEntry, dom: HTMLImageElement): Promise<string>
+}
+
+interface SchemaCached {
+    imageDB?: ImageDB
+    decryptImage?: DecryptImage
 }
 
 export const figure = {
@@ -100,32 +102,23 @@ export const image = {
         const dom = document.createElement("img")
         if (node.attrs.image !== false) {
             dom.dataset.image = String(node.attrs.image)
-            const imageDB = (node.type.schema.cached as {imageDB?: ImageDB}).imageDB
+            const imageDB = (node.type.schema.cached as SchemaCached).imageDB
             if (imageDB) {
                 const imageEntry = imageDB.db[node.attrs.image]
                 if (imageEntry?.image) {
                     const isEncrypted =
                         imageEntry.file_type === "application/octet-stream"
                     if (isEncrypted) {
-                        const editor = imageDB.mod?.editor
-                        const key = editor?.e2ee?.key
-                        if (key) {
-                            import("../../editor/e2ee/encryptor.js").then(
-                                ({E2EEEncryptor}) => {
-                                    E2EEEncryptor.decryptImageToUrl(
-                                        imageEntry.image as string,
-                                        key,
-                                        imageEntry.original_file_type || "image/png"
-                                    )
-                                        .then(url => {
-                                            dom.setAttribute("src", url)
-                                            dom.dataset.imageSrc = url
-                                        })
-                                        .catch(() => {
-                                            dom.setAttribute("src", errorImageUrl())
-                                        })
-                                }
-                            )
+                        const decryptImage = (node.type.schema.cached as SchemaCached).decryptImage
+                        if (decryptImage) {
+                            decryptImage(imageEntry, dom)
+                                .then(url => {
+                                    dom.setAttribute("src", url)
+                                    dom.dataset.imageSrc = url
+                                })
+                                .catch(() => {
+                                    dom.setAttribute("src", errorImageUrl())
+                                })
                         } else {
                             dom.setAttribute("src", errorImageUrl())
                         }

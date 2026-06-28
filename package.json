@@ -76,6 +76,10 @@
       "types": "./dist/exporter/pandoc/index.d.ts",
       "default": "./dist/exporter/pandoc/index.js"
     },
+    "./exporter/template": {
+      "types": "./dist/exporter/template/index.d.ts",
+      "default": "./dist/exporter/template/index.js"
+    },
     "./exporter/*": {
       "types": "./dist/exporter/*.d.ts",
       "default": "./dist/exporter/*.js"
@@ -132,7 +136,7 @@
     "@types/prosemirror-schema-basic": "^1.0.2",
     "@types/prosemirror-tables": "^0.8.0",
     "@xmldom/xmldom": "^0.9.10",
-    "citeproc-plus": "^0.3.7",
+    "citeproc-plus": "^1.0.1",
     "happy-dom": "^20.10.6",
     "jest": "^30.4.2",
     "ts-jest": "^29.1.2",
