@@ -82,6 +82,7 @@ export class DOCXExporterRichtext {
     fncategoryCounter: Record<string, number>
     docPrCount: number
     citationCounter: number // Track which citation we're processing
+    paragraphIdCounter: number // Used for w14:paraId attributes on comments
 
     constructor(
         doc: any,
@@ -113,6 +114,7 @@ export class DOCXExporterRichtext {
         this.fncategoryCounter = {}
         this.docPrCount = -1
         this.citationCounter = 0 // Track which citation we're processing
+        this.paragraphIdCounter = 0 // Used for w14:paraId attributes on comments
     }
 
     run(node: any, options: any = {}, nextNode: any = null): string {
@@ -125,14 +127,15 @@ export class DOCXExporterRichtext {
             node.marks
                 .filter((mark: any) => mark.type === "comment")
                 .forEach((comment: any) => {
-                    if (!this.doc.comments[comment.attrs.id]) {
+                    const commentData = this.doc.comments?.[comment.attrs.id]
+                    if (!commentData) {
                         return
                     }
                     if (!comments[comment.attrs.id]) {
                         comments[comment.attrs.id] = {
                             start: node,
                             end: node,
-                            content: this.doc.comments[comment.attrs.id]
+                            content: commentData
                         }
                     } else {
                         comments[comment.attrs.id]["end"] = node
@@ -697,13 +700,13 @@ export class DOCXExporterRichtext {
                                     <w:fldChar w:fldCharType="begin"/>
                                 </w:r>
                                 <w:r>
-                                    <w:instrText xml:space="preserve">${fieldInstruction}</w:instrText>
+                                    <w:instrText xml:space="preserve">${escapeText(fieldInstruction)}</w:instrText>
                                 </w:r>
                                 <w:r>
                                     <w:fldChar w:fldCharType="separate"/>
                                 </w:r>
                                 <w:r>
-                                    <w:t>${formattedText}</w:t>
+                                    <w:t>${escapeText(formattedText)}</w:t>
                                 </w:r>
                                 <w:r>
                                     <w:fldChar w:fldCharType="end"/>
@@ -744,13 +747,13 @@ export class DOCXExporterRichtext {
                                 <w:fldChar w:fldCharType="begin"/>
                             </w:r>
                             <w:r>
-                                <w:instrText xml:space="preserve">${fieldInstruction}</w:instrText>
+                                <w:instrText xml:space="preserve">${escapeText(fieldInstruction)}</w:instrText>
                             </w:r>
                             <w:r>
                                 <w:fldChar w:fldCharType="separate"/>
                             </w:r>
                             <w:r>
-                                <w:t>${formattedText}</w:t>
+                                <w:t>${escapeText(formattedText)}</w:t>
                             </w:r>
                             <w:r>
                                 <w:fldChar w:fldCharType="end"/>
