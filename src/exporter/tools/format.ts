@@ -1,4 +1,6 @@
-import prettier from "prettier"
+import prettier from "prettier/standalone"
+import * as htmlPlugin from "prettier/plugins/html"
+import * as postcssPlugin from "prettier/plugins/postcss"
 import * as xmlPluginModule from "@prettier/plugin-xml"
 
 const xmlPlugin = (xmlPluginModule as any).default ?? xmlPluginModule
@@ -11,6 +13,7 @@ const baseOptions = {
 export async function formatHtml(html: string): Promise<string> {
     return prettier.format(html, {
         parser: "html",
+        plugins: [htmlPlugin],
         ...baseOptions
     })
 }
@@ -18,6 +21,7 @@ export async function formatHtml(html: string): Promise<string> {
 export async function formatCss(css: string): Promise<string> {
     return prettier.format(css, {
         parser: "css",
+        plugins: [postcssPlugin],
         ...baseOptions
     })
 }
