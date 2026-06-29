@@ -1,7 +1,7 @@
 import download from "downloadjs"
-import pretty from "pretty"
 
 import {shortFileTitle} from "fwtoolkit"
+import {formatXml} from "../tools/format.js"
 import type {BibDB, CSL, ExportDoc, ImageDB} from "../../types.js"
 import {createSlug} from "../tools/file.js"
 import {ZipFileCreator} from "../tools/zip.js"
@@ -52,7 +52,7 @@ export class JATSExporter {
         this.httpFiles = []
     }
 
-    init(): Promise<void> {
+    async init(): Promise<void> {
         const fileFormat = this.type === "article" ? "jats" : "bits"
         this.zipFileName = `${createSlug(this.docTitle)}.${fileFormat}.zip`
         this.converter = new JATSExporterConverter(
@@ -62,75 +62,69 @@ export class JATSExporter {
             this.imageDB,
             this.bibDB
         )
-        return this.converter
-            .init()
-            .then(
-                ({
-                    front,
-                    body,
-                    back,
-                    imageIds
-                }: {
-                    front: string
-                    body: string
-                    back: string
-                    imageIds: string[]
-                }) => {
-                    const jats =
-                        this.type === "article"
-                            ? articleTemplate({front, body, back})
-                            : bookPartWrapperTemplate({front, body, back})
-                    this.textFiles.push({
-                        filename: "manuscript.xml",
-                        contents: pretty(jats, {ocd: true})
-                    })
-                    const images = imageIds.map(id => {
-                        const imageEntry = this.imageDB.db[id]
-                        const imageValue = imageEntry.image
-                        let filename: string
-                        let url: string
-                        let blob: Blob | undefined
-                        if (imageValue instanceof Blob) {
-                            const ext =
-                                (imageEntry.file_type as string | undefined) ||
-                                imageValue.type.split("/")[1] ||
-                                "bin"
-                            filename = `image-${id}.${ext}`
-                            url = `blob:${id}`
-                            blob = imageValue
-                        } else {
-                            filename = (imageValue as string).split("/").pop()!
-                            url = imageValue as string
-                        }
-                        return {
-                            title: imageEntry.title || "",
-                            filename,
-                            url,
-                            blob
-                        }
-                    })
-                    this.textFiles.push({
-                        filename: "manifest.xml",
-                        contents: pretty(
-                            darManifest({
-                                title: this.docTitle,
-                                type: this.type,
-                                images
-                            }),
-                            {ocd: true}
-                        )
-                    })
-                    images.forEach(image => {
-                        this.httpFiles.push({
-                            filename: image.filename,
-                            url: image.url,
-                            blob: image.blob
-                        })
-                    })
-
-                    return this.createZip()
-                }
+        const {
+            front,
+            body,
+            back,
+            imageIds
+        }: {
+            front: string
+            body: string
+            back: string
+            imageIds: string[]
+        } = await this.converter.init()
+        const jats =
+            this.type === "article"
+                ? articleTemplate({front, body, back})
+                : bookPartWrapperTemplate({front, body, back})
+        this.textFiles.push({
+            filename: "manuscript.xml",
+            contents: await formatXml(jats)
+        })
+        const images = imageIds.map(id => {
+            const imageEntry = this.imageDB.db[id]
+            const imageValue = imageEntry.image
+            let filename: string
+            let url: string
+            let blob: Blob | undefined
+            if (imageValue instanceof Blob) {
+                const ext =
+                    (imageEntry.file_type as string | undefined) ||
+                    imageValue.type.split("/")[1] ||
+                    "bin"
+                filename = `image-${id}.${ext}`
+                url = `blob:${id}`
+                blob = imageValue
+            } else {
+                filename = (imageValue as string).split("/").pop()!
+                url = imageValue as string
+            }
+            return {
+                title: imageEntry.title || "",
+                filename,
+                url,
+                blob
+            }
+        })
+        this.textFiles.push({
+            filename: "manifest.xml",
+            contents: await formatXml(
+                darManifest({
+                    title: this.docTitle,
+                    type: this.type,
+                    images
+                })
             )
+        })
+        images.forEach(image => {
+            this.httpFiles.push({
+                filename: image.filename,
+                url: image.url,
+                blob: image.blob
+            })
+        })
+
+        return this.createZip()
     }
 
     createZip(): Promise<void> {

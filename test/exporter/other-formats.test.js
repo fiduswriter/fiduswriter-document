@@ -58,7 +58,20 @@ jest.unstable_mockModule("fwtoolkit", () => ({
     gettext: str => str,
     interpolate: (str, args) => str.replace(/%s/g, () => args.shift()),
     staticUrl: path => path,
-    noSpaceTmp: () => "tmp",
+    noSpaceTmp: (strings, ...values) => {
+        const tmpStrings = Array.from(strings)
+        let combined = ""
+        while (tmpStrings.length > 0 || values.length > 0) {
+            if (tmpStrings.length > 0) {
+                combined += tmpStrings.shift()
+            }
+            if (values.length > 0) {
+                const value = values.shift()
+                combined += value !== undefined && value !== null ? String(value) : ""
+            }
+        }
+        return combined.split("\n").map(line => line.replace(/^\s*/g, "")).join("")
+    },
     longFilePath: (path, filename) => `${path}${filename}`
 }))
 

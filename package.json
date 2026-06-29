@@ -1,6 +1,6 @@
 {
   "name": "@fiduswriter/document",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Fidus Writer document schema, importers and exporters",
   "repository": {
     "type": "git",
@@ -114,6 +114,7 @@
     "deploy-pages": "./scripts/deploy-pages.sh"
   },
   "dependencies": {
+    "@prettier/plugin-xml": "^3.4.2",
     "@vivliostyle/print": "^2.42.0",
     "biblatex-csl-converter": "^3.0.0",
     "downloadjs": "^1.4.7",
@@ -125,7 +126,7 @@
     "mathml-to-latex": "^1.4.3",
     "mathml2omml": "^0.5.0",
     "orderedmap": "^2.1.1",
-    "pretty": "^2.0.0",
+    "prettier": "^3.5.3",
     "prosemirror-model": "^1.25.0",
     "prosemirror-schema-basic": "^1.2.4",
     "prosemirror-tables": "^1.6.4"
@@ -139,6 +140,11 @@
     "citeproc-plus": "^1.0.1",
     "happy-dom": "^20.10.6",
     "jest": "^30.4.2",
+    "prosemirror-commands": "^1.7.1",
+    "prosemirror-history": "^1.5.0",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-view": "^1.41.9",
     "ts-jest": "^29.1.2",
     "ts-jest-resolver": "^2.0.1",
     "tsx": "^4.22.4",

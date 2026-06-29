@@ -1,8 +1,8 @@
 import download from "downloadjs"
-import pretty from "pretty"
 
 import {shortFileTitle, staticUrl} from "fwtoolkit"
 import type {BibDB, CSL, ExportDoc, FidusNode, ImageDB} from "../../types.js"
+import {formatHtml} from "../tools/format.js"
 import {removeHidden} from "../tools/doc_content.js"
 import {createSlug} from "../tools/file.js"
 import {ZipFileCreator, type ZipTextFile} from "../tools/zip.js"
@@ -122,7 +122,7 @@ export class HTMLExporter {
                 url: staticUrl("zip/mathlive_style.zip")
             })
         }
-        this.addDoc(html)
+        await this.addDoc(html)
         this.addImages(imageIds)
         await Promise.all(
             extraStyleSheets.map(async (sheet: any) => await this.loadStyle(sheet))
@@ -143,10 +143,10 @@ export class HTMLExporter {
         }
     }
 
-    addDoc(html: string): void {
+    async addDoc(html: string): Promise<void> {
         this.textFiles.push({
             filename: this.contentFileName,
-            contents: pretty(html, {ocd: true})
+            contents: await formatHtml(html)
         })
     }
 

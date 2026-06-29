@@ -1,10 +1,10 @@
 import {convertLatexToMathMl} from "mathlive"
-import pretty from "pretty"
 
 import {escapeText, staticUrl} from "fwtoolkit"
 import {getCat} from "../../schema/i18n.js"
 import type {BibDB, CSL, DocSettings, FidusNode} from "../../types.js"
 import {descendantNodes} from "../tools/doc_content.js"
+import {formatCss} from "../tools/format.js"
 import {HTMLExporterCitations} from "./citations.js"
 import {displayNumber} from "./tools.js"
 
@@ -140,9 +140,7 @@ export class HTMLExporterConvert {
         if (this.citations.bibCSS.length) {
             this.extraStyleSheets.push({
                 filename: this.relativeUrls ? "css/bibliography.css" : null,
-                contents: pretty(this.citations.bibCSS, {
-                    ocd: true
-                })
+                contents: await formatCss(this.citations.bibCSS)
             })
         }
         if (this.features.math) {

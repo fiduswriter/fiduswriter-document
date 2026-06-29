@@ -17,16 +17,6 @@ declare module "downloadjs" {
     export default download
 }
 
-declare module "pretty" {
-    /**
-     * Pretty-print HTML/XML markup.
-     * @param input - Markup string to format.
-     * @param options - Formatting options.
-     */
-    function pretty(input: string, options?: {ocd?: boolean}): string
-    export default pretty
-}
-
 declare module "@vivliostyle/print" {
     /**
      * Render the given HTML with Vivliostyle for printing.

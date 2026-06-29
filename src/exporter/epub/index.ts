@@ -1,7 +1,6 @@
-import pretty from "pretty"
-
 import {HTMLExporter} from "../html/index.js"
 import type {BibDB, CSL, ExportDoc, ImageDB} from "../../types.js"
+import {formatHtml, formatXml} from "../tools/format.js"
 
 import {
     containerTemplate,
@@ -46,9 +45,9 @@ export class EpubExporter extends HTMLExporter {
         this.shortLang = this.lang.split("-")[0]
     }
 
-    createZip(): Promise<void> {
+    async createZip(): Promise<void> {
         this.prefixFiles()
-        this.createEPUBFiles()
+        await this.createEPUBFiles()
         return super.createZip()
     }
 
@@ -65,24 +64,24 @@ export class EpubExporter extends HTMLExporter {
         )
     }
 
-    createEPUBFiles(): void {
+    async createEPUBFiles(): Promise<void> {
         // Generate the required EPUB-specific files using the converted content
         this.textFiles.push(
             {
                 filename: "META-INF/container.xml",
-                contents: pretty(containerTemplate(), {ocd: true})
+                contents: await formatXml(containerTemplate())
             },
             {
                 filename: "EPUB/document.opf",
-                contents: pretty(this.createOPF(), {ocd: true})
+                contents: await formatXml(this.createOPF())
             },
             {
                 filename: "EPUB/document.ncx",
-                contents: pretty(this.createNCX(), {ocd: true})
+                contents: await formatXml(this.createNCX())
             },
             {
                 filename: "EPUB/document-nav.xhtml",
-                contents: pretty(this.createNav(), {ocd: true})
+                contents: await formatHtml(this.createNav())
             }
         )
     }
